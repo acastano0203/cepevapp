@@ -26,14 +26,19 @@ begin
   ---------------------------------------------------------------------------
   -- Equipos
   ---------------------------------------------------------------------------
-  insert into public.teams (name) values ('Esperanza') returning id into v_team_esperanza;
-  insert into public.teams (name) values ('Camino')    returning id into v_team_camino;
+  insert into public.teams (name) values ('Esperanza')
+    on conflict (name) do update set is_active = true
+    returning id into v_team_esperanza;
+
+  insert into public.teams (name) values ('Camino')
+    on conflict (name) do update set is_active = true
+    returning id into v_team_camino;
 
   ---------------------------------------------------------------------------
   -- Habitaciones y camas: 70 habitaciones x 6 camas = 420
   ---------------------------------------------------------------------------
   for i in 1..70 loop
-    v_sex := case when i % 2 = 0 then 'Hombres' else 'Mujeres' end;
+    v_sex := (case when i % 2 = 0 then 'Hombres' else 'Mujeres' end)::public.sex_group;
     insert into public.rooms (code, building, sex)
     values (
       case when i <= 35 then 'A-' else 'B-' end || (100 + case when i <= 35 then i else i - 35 end),
@@ -55,10 +60,10 @@ begin
     insert into public.people (full_name, sex, birth_date, phone, kind, is_available)
     values (
       v_names[i] || ' ' || v_last[i],
-      case when i % 2 = 0 then 'Hombres' else 'Mujeres' end,
+      (case when i % 2 = 0 then 'Hombres' else 'Mujeres' end)::public.sex_group,
       date '1992-04-12' - (i * 40),
       '30000' || lpad(i::text, 5, '0'),
-      case when i in (8, 12, 17) then 'Conductor' else 'Logistica' end,
+      (case when i in (8, 12, 17) then 'Conductor' else 'Logistica' end)::public.person_kind,
       true
     );
   end loop;
@@ -67,7 +72,7 @@ begin
   -- Residentes (336) con cama asignada
   ---------------------------------------------------------------------------
   for i in 1..336 loop
-    v_sex := case when (i / 6) % 2 = 0 then 'Mujeres' else 'Hombres' end;
+    v_sex := (case when (i / 6) % 2 = 0 then 'Mujeres' else 'Hombres' end)::public.sex_group;
 
     insert into public.people (full_name, sex, birth_date, kind)
     values (
@@ -105,7 +110,7 @@ begin
     insert into public.people (full_name, sex, birth_date, phone, base_city, kind, team_id, daily_goal)
     values (
       v_names[i] || ' ' || v_last[25 - i],
-      case when i % 2 = 0 then 'Hombres' else 'Mujeres' end,
+      (case when i % 2 = 0 then 'Hombres' else 'Mujeres' end)::public.sex_group,
       date '1997-05-22' - (i * 60),
       '30010' || lpad(i::text, 5, '0'),
       case when i <= 6 then 'Bucaramanga' when i <= 10 then 'Cucuta' else 'Piedecuesta' end,
