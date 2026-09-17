@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Tokens de marca CEPEV
+   ========================================================================== */
+@theme {
+  --color-navy-50:  #eef4fa;
+  --color-navy-100: #d9e5f1;
+  --color-navy-200: #b4c9e0;
+  --color-navy-300: #86a8c9;
+  --color-navy-400: #5284aa;
+  --color-navy-500: #2f6493;
+  --color-navy-600: #174776;
+  --color-navy-700: #143a60;
+  --color-navy-800: #12304e;
+  --color-navy-900: #0d2338;
+
+  --color-gold-50:  #fff8e8;
+  --color-gold-100: #fff1d5;
+  --color-gold-200: #ffe2a8;
+  --color-gold-300: #f2c869;
+  --color-gold-400: #e9b946;
+  --color-gold-500: #e6a31b;
+  --color-gold-600: #c5860e;
+  --color-gold-700: #8e6110;
+
+  --color-ink:      #18334e;
+  --color-ink-soft: #5c6c7d;
+  --color-line:     #dce4ed;
+  --color-canvas:   #f4f6fa;
+
+  --color-success-bg: #e7f3ec;
+  --color-success-fg: #286348;
+  --color-danger-bg:  #fae9e6;
+  --color-danger-fg:  #9b3e30;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --radius-card: 0.75rem;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid var(--color-gold-500);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-navy-600);
+    color: #fff;
+  }
+}
+
+/* ==========================================================================
+   Utilidades propias
+   ========================================================================== */
+@utility surface {
+  background-color: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
