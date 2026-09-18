@@ -639,6 +639,11 @@ $fn$;
 
 -- ===========================================================================
 -- PERSONAS
+--
+--   OJO: 09_colporteurs.sql reemplaza esta funcion por una version con un
+--   parametro adicional (p_notes). Si vuelves a ejecutar SOLO este archivo
+--   despues del 09, ejecuta tambien el 09 a continuacion: de lo contrario
+--   quedarian las dos firmas y la llamada por nombre seria ambigua.
 -- ===========================================================================
 create or replace function public.person_upsert(
   p_id uuid,

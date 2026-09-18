@@ -24,9 +24,9 @@ import {
   useColporteurProgress,
   useRotations,
   useSales,
-  useSavePerson,
   useTeams,
 } from '@/hooks/useCepev'
+import { ColporteurRegistry } from '@/features/colporteurs/ColporteurRegistry'
 import { SEX_GROUPS } from '@/lib/constants'
 import { useAuth } from '@/lib/auth'
 import { addDays, formatDate, formatNumber, matches, percent, todayISO } from '@/lib/utils'
@@ -41,8 +41,8 @@ export default function Colporteurs() {
   const rotationsQuery = useRotations()
   const teamsQuery = useTeams()
   const actions = useColporteurActions()
-  const savePerson = useSavePerson()
 
+  const [tab, setTab] = useState('resultados')
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({})
@@ -94,14 +94,12 @@ export default function Colporteurs() {
     sale: actions.registerSale,
     correct: actions.correctSale,
     rotation: actions.createRotation,
-    person: savePerson,
   }
 
   const titles = {
     sale: 'Registrar libros vendidos',
     correct: 'Corregir reporte diario',
     rotation: 'Programar rotación de ciudad',
-    person: 'Registrar colportor',
   }
 
   const handleSubmit = (event) => {
@@ -116,14 +114,41 @@ export default function Colporteurs() {
     <>
       <PageHeader title="Colportores" subtitle="Equipos, ciudades y resultados diarios.">
         <TodayChip />
-        {canWrite && (
+        {canWrite && tab === 'resultados' && (
           <Button onClick={() => openModal('sale', { person_id: '', report_date: today, books_sold: '' })}>
             <Plus />
-            Registrar ventas
+            Registrar siembras
           </Button>
         )}
       </PageHeader>
 
+      <div role="tablist" aria-label="Secciones de colportores" className="mb-5 flex gap-1 border-b border-line">
+        {[
+          { id: 'resultados', label: 'Resultados diarios' },
+          { id: 'registro', label: 'Registro de colportores' },
+        ].map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            type="button"
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
+            className={
+              'relative -mb-px min-h-11 px-3 text-sm font-medium transition-colors sm:px-4 ' +
+              (tab === item.id
+                ? 'border-b-2 border-navy-600 text-navy-700'
+                : 'border-b-2 border-transparent text-ink-soft hover:text-ink')
+            }
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'registro' && <ColporteurRegistry />}
+
+      {tab === 'resultados' && (
+        <>
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Libros vendidos" value={formatNumber(totals.books)} detail={`Meta 7 días: ${formatNumber(totals.goal)}`} onClick={() => setView('')} />
         <KpiCard label="Cumplimiento" value={`${totals.compliance}%`} detail="Acumulado de los últimos 7 días" tone={totals.compliance >= 80 ? 'green' : 'gold'} onClick={() => setView('bajo')} />
@@ -140,24 +165,6 @@ export default function Colporteurs() {
         />
         {canWrite && (
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              onClick={() =>
-                openModal('person', {
-                  full_name: '',
-                  sex: 'Mujeres',
-                  birth_date: '1998-01-01',
-                  phone: '',
-                  base_city: 'Piedecuesta',
-                  kind: 'Colportor',
-                  team_id: '',
-                  daily_goal: 10,
-                })
-              }
-            >
-              <Plus />
-              Colportor
-            </Button>
             <Button
               variant="secondary"
               onClick={() =>
@@ -350,23 +357,6 @@ export default function Colporteurs() {
             </>
           )}
 
-          {modal === 'person' && (
-            <>
-              <Input label="Nombre completo" required className="sm:col-span-2" value={form.full_name} onChange={update('full_name')} />
-              <Select label="Sexo" value={form.sex} onChange={update('sex')} options={SEX_GROUPS.map((value) => ({ value, label: value }))} />
-              <Input label="Fecha de nacimiento" type="date" required max={today} value={form.birth_date} onChange={update('birth_date')} />
-              <Input label="Teléfono" type="tel" value={form.phone} onChange={update('phone')} />
-              <Input label="Ciudad base" value={form.base_city} onChange={update('base_city')} />
-              <Select
-                label="Equipo"
-                value={form.team_id}
-                onChange={update('team_id')}
-                placeholder="Sin equipo"
-                options={(teamsQuery.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
-              />
-              <Input label="Meta diaria (libros)" type="number" min="0" value={form.daily_goal} onChange={update('daily_goal')} />
-            </>
-          )}
         </form>
       </Dialog>
 
@@ -374,6 +364,8 @@ export default function Colporteurs() {
         <BookOpen className="size-4 shrink-0" aria-hidden="true" />
         Cada persona solo puede tener un reporte por día: para ajustarlo usa «Editar reporte» e indica el motivo.
       </div>
+        </>
+      )}
     </>
   )
 }

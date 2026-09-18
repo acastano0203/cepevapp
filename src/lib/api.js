@@ -48,8 +48,18 @@ export const peopleApi = {
         p_team: payload.team_id || null,
         p_goal: Number(payload.daily_goal ?? 0),
         p_available: payload.is_available ?? true,
+        p_notes: payload.notes ?? null,
+        p_document_type: payload.document_type || null,
+        p_document_id: payload.document_id || null,
+        p_email: payload.email || null,
       }),
     ),
+
+  remove: ({ id, force = false }) =>
+    runQuery(supabase.rpc('person_delete', { p_id: id, p_force: force })),
+
+  setAvailability: ({ id, available }) =>
+    runQuery(supabase.rpc('person_set_availability', { p_id: id, p_available: available })),
 }
 
 /* ===========================================================================
@@ -223,6 +233,9 @@ export const fleetApi = {
  * ======================================================================== */
 export const colporteurApi = {
   progress: () => runQuery(supabase.from('v_colporteur_progress').select('*').order('full_name')),
+
+  /** Grilla del modulo de registro: ficha + equipo + dependencias. */
+  registry: () => runQuery(supabase.from('v_colporteurs').select('*').order('full_name')),
 
   salesRange: (from, to) =>
     runQuery(

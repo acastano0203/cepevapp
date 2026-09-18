@@ -1,17 +1,28 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// Se normalizan: Vercel puede entregar la variable vacia ("") si se guardo sin
+// valor, y una cadena vacia haria explotar a createClient antes de montar React.
+const url = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim()
+const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
 
-export const isSupabaseConfigured = Boolean(url && anonKey)
+export const missingEnvVars = [
+  !url && 'VITE_SUPABASE_URL',
+  !anonKey && 'VITE_SUPABASE_ANON_KEY',
+].filter(Boolean)
 
-if (!isSupabaseConfigured && import.meta.env.DEV) {
-  console.warn(
-    '[CEPEV] Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el archivo .env',
+export const isSupabaseConfigured = missingEnvVars.length === 0
+
+if (!isSupabaseConfigured) {
+  console.error(
+    `[CEPEV] Falta configurar: ${missingEnvVars.join(' y ')}. ` +
+      'En desarrollo van en el archivo .env; en Vercel, en Settings -> Environment Variables ' +
+      '(y hay que volver a desplegar para que la compilacion las tome).',
   )
 }
 
-export const supabase = createClient(url ?? 'http://localhost', anonKey ?? 'public-anon-key', {
+// Con valores de reserva la aplicacion arranca igual y puede mostrar una
+// pantalla explicativa en lugar de una pagina en blanco.
+export const supabase = createClient(url || 'https://placeholder.supabase.co', anonKey || 'placeholder-key', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
