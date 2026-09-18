@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoadingState } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
+import { isSupabaseConfigured } from '@/lib/supabase'
+import ConfigNeeded from '@/pages/ConfigNeeded'
 import Login from '@/pages/Login'
 
 // Cada módulo se carga bajo demanda: el bundle inicial se mantiene liviano.
@@ -33,6 +35,10 @@ function ProtectedRoutes() {
 
 export default function App() {
   const { session, loading } = useAuth()
+
+  // Sin credenciales no hay nada que mostrar: se explica que falta en vez de
+  // dejar una pagina en blanco con un error de consola.
+  if (!isSupabaseConfigured) return <ConfigNeeded />
 
   return (
     <Suspense fallback={<FullScreenLoader />}>
