@@ -26,7 +26,7 @@ import {
   useSales,
   useTeams,
 } from '@/hooks/useCepev'
-import { ColporteurRegistry } from '@/features/colporteurs/ColporteurRegistry'
+import { PeopleRegistry } from '@/features/people/PeopleRegistry'
 import { SEX_GROUPS } from '@/lib/constants'
 import { useAuth } from '@/lib/auth'
 import { addDays, formatDate, formatNumber, matches, percent, todayISO } from '@/lib/utils'
@@ -145,7 +145,7 @@ export default function Colporteurs() {
         ))}
       </div>
 
-      {tab === 'registro' && <ColporteurRegistry />}
+      {tab === 'registro' && <PeopleRegistry kind="Colportor" />}
 
       {tab === 'resultados' && (
         <>

@@ -20,7 +20,7 @@ export const qk = {
   fuel: ['fleet', 'fuel'],
   maintenance: ['fleet', 'maintenance'],
   progress: ['colporteurs', 'progress'],
-  registry: ['colporteurs', 'registry'],
+  registry: (kind) => ['people', 'registry', kind],
   sales: (from, to) => ['colporteurs', 'sales', from, to],
   rotations: ['colporteurs', 'rotations'],
 }
@@ -64,7 +64,7 @@ const PEOPLE_KEYS = [['people'], ['colporteurs'], qk.progress, qk.arrivals]
 
 export const useSavePerson = () =>
   useAppMutation(peopleApi.upsert, {
-    success: (_data, variables) => (variables.id ? 'Ficha actualizada' : 'Colportor registrado'),
+    success: (_data, variables) => (variables.id ? 'Ficha actualizada' : 'Ficha registrada'),
     invalidate: PEOPLE_KEYS,
   })
 
@@ -76,7 +76,7 @@ export const useDeletePerson = () =>
 
 export const useSetAvailability = () =>
   useAppMutation(peopleApi.setAvailability, {
-    success: (data) => (data?.is_available ? 'Colportor reactivado' : 'Colportor desactivado'),
+    success: (data) => (data?.is_available ? 'Ficha reactivada' : 'Ficha desactivada'),
     invalidate: PEOPLE_KEYS,
   })
 
@@ -191,8 +191,8 @@ export const useFleetActions = () => ({
 export const useColporteurProgress = () =>
   useQuery({ queryKey: qk.progress, queryFn: colporteurApi.progress })
 
-export const useColporteurRegistry = () =>
-  useQuery({ queryKey: qk.registry, queryFn: colporteurApi.registry })
+export const usePeopleRegistry = (kind) =>
+  useQuery({ queryKey: qk.registry(kind), queryFn: () => peopleApi.registry(kind) })
 
 export const useSales = (from, to) =>
   useQuery({ queryKey: qk.sales(from, to), queryFn: () => colporteurApi.salesRange(from, to) })

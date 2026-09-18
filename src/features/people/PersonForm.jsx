@@ -10,24 +10,26 @@ export const DOCUMENT_TYPES = [
   { value: 'PA', label: 'PA · Pasaporte' },
 ]
 
-/** Ficha vacia. Se mapea 1:1 con las columnas de public.people. */
-export const EMPTY_COLPORTEUR = {
-  id: null,
-  full_name: '',
-  document_type: 'CC',
-  document_id: '',
-  email: '',
-  sex: 'Mujeres',
-  birth_date: '',
-  phone: '',
-  base_city: 'Piedecuesta',
-  team_id: '',
-  daily_goal: 10,
-  is_available: true,
-  notes: '',
+/** Ficha vacía. Se mapea 1:1 con las columnas de public.people. */
+export function emptyPerson(config) {
+  return {
+    id: null,
+    full_name: '',
+    document_type: 'CC',
+    document_id: '',
+    email: '',
+    sex: 'Mujeres',
+    birth_date: '',
+    phone: '',
+    base_city: 'Piedecuesta',
+    team_id: '',
+    daily_goal: config?.defaultGoal ?? 0,
+    is_available: true,
+    notes: '',
+  }
 }
 
-/** Convierte una fila de v_colporteurs en los valores del formulario. */
+/** Convierte una fila de v_people_registry en los valores del formulario. */
 export function toFormValues(row) {
   return {
     id: row.id,
@@ -47,11 +49,13 @@ export function toFormValues(row) {
 }
 
 /**
- * Formulario de alta y edicion. Se usa tanto dentro de la fila de la tabla
- * (escritorio) como dentro de la tarjeta (movil): el mismo componente, sin
+ * Formulario de alta y edición. Se usa dentro de la fila de la tabla
+ * (escritorio) y dentro de la tarjeta (móvil): el mismo componente, sin
  * duplicar validaciones ni etiquetas.
+ *
+ * Los campos propios de cada tipo de persona se muestran según `config`.
  */
-export function ColporteurForm({ value, onChange, onSubmit, onCancel, teams = [], saving }) {
+export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], saving, config }) {
   const update = (key) => (event) => onChange({ ...value, [key]: event.target.value })
   const isNew = !value.id
 
@@ -64,7 +68,7 @@ export function ColporteurForm({ value, onChange, onSubmit, onCancel, teams = []
       className="rounded-xl border border-navy-200 bg-navy-50/40 p-4 sm:p-5"
     >
       <p className="mb-4 text-xs font-bold tracking-[0.13em] text-navy-500 uppercase">
-        {isNew ? 'Nuevo colportor' : `Editando: ${value.full_name || 'sin nombre'}`}
+        {isNew ? `Nuevo ${config.singular}` : `Editando: ${value.full_name || 'sin nombre'}`}
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -127,26 +131,33 @@ export function ColporteurForm({ value, onChange, onSubmit, onCancel, teams = []
           placeholder="300 000 0000"
         />
         <Input
-          label="Ciudad base"
+          label="Ciudad de procedencia"
           value={value.base_city}
           onChange={update('base_city')}
-          hint="Si su equipo tiene rotación, esta se impone"
+          hint={config.showTeam ? 'Si su equipo tiene rotación, esta se impone' : undefined}
         />
-        <Select
-          label="Equipo"
-          value={value.team_id}
-          onChange={update('team_id')}
-          placeholder="Sin equipo asignado"
-          options={teams.map((team) => ({ value: team.id, label: team.name }))}
-        />
-        <Input
-          label="Meta diaria (libros)"
-          type="number"
-          min="0"
-          step="1"
-          value={value.daily_goal}
-          onChange={update('daily_goal')}
-        />
+
+        {config.showTeam && (
+          <Select
+            label="Equipo"
+            value={value.team_id}
+            onChange={update('team_id')}
+            placeholder="Sin equipo asignado"
+            options={teams.map((team) => ({ value: team.id, label: team.name }))}
+          />
+        )}
+
+        {config.showGoal && (
+          <Input
+            label={config.goalLabel ?? 'Meta diaria'}
+            type="number"
+            min="0"
+            step="1"
+            value={value.daily_goal}
+            onChange={update('daily_goal')}
+          />
+        )}
+
         <Select
           label="Estado"
           value={value.is_available ? 'activo' : 'inactivo'}
@@ -156,6 +167,7 @@ export function ColporteurForm({ value, onChange, onSubmit, onCancel, teams = []
             { value: 'inactivo', label: 'Inactivo' },
           ]}
         />
+
         <Textarea
           label="Observaciones"
           className="sm:col-span-2 xl:col-span-3"
@@ -172,7 +184,7 @@ export function ColporteurForm({ value, onChange, onSubmit, onCancel, teams = []
         </Button>
         <Button type="submit" loading={saving}>
           <Save />
-          {isNew ? 'Registrar colportor' : 'Guardar cambios'}
+          {isNew ? `Registrar ${config.singular}` : 'Guardar cambios'}
         </Button>
       </div>
     </form>

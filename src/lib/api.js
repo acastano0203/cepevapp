@@ -35,6 +35,12 @@ export const peopleApi = {
 
   teams: () => runQuery(supabase.from('teams').select('id, name').eq('is_active', true).order('name')),
 
+  /** Grilla de registro: sirve para cualquier tipo de persona. */
+  registry: (kind) =>
+    runQuery(
+      supabase.from('v_people_registry').select('*').eq('kind', kind).order('full_name'),
+    ),
+
   upsert: (payload) =>
     runQuery(
       supabase.rpc('person_upsert', {
@@ -233,9 +239,6 @@ export const fleetApi = {
  * ======================================================================== */
 export const colporteurApi = {
   progress: () => runQuery(supabase.from('v_colporteur_progress').select('*').order('full_name')),
-
-  /** Grilla del modulo de registro: ficha + equipo + dependencias. */
-  registry: () => runQuery(supabase.from('v_colporteurs').select('*').order('full_name')),
 
   salesRange: (from, to) =>
     runQuery(

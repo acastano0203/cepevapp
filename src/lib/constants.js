@@ -1,4 +1,4 @@
-import { BedDouble, BookOpen, Bus, House, UtensilsCrossed } from 'lucide-react'
+import { BedDouble, BookOpen, Bus, GraduationCap, House, UtensilsCrossed } from 'lucide-react'
 
 /** Menu lateral. Agregar un modulo = agregar una entrada aqui + su ruta. */
 export const NAV_ITEMS = [
@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
   { to: '/vehiculos', label: 'Vehiculos', icon: Bus, description: 'Disponibilidad, recorridos y cuidado de la flota' },
   { to: '/alojamientos', label: 'Alojamientos', icon: BedDouble, description: 'Cada persona, en el lugar adecuado' },
   { to: '/colportores', label: 'Colportores', icon: BookOpen, description: 'Equipos, ciudades y resultados diarios' },
+  { to: '/cepevistas', label: 'Cepevistas', icon: GraduationCap, description: 'Fichas de los participantes del centro' },
 ]
 
 /** Etiquetas con tilde para los valores del enum (la base los guarda sin tilde). */
@@ -42,6 +43,7 @@ export const PERSON_KINDS = [
   'Colportor',
   'Llegada',
   'Administrativo',
+  'Cepevista',
 ]
 
 export const KITCHEN_ELIGIBLE_KINDS = ['Logistica', 'Conductor', 'Administrativo']

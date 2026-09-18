@@ -13,6 +13,7 @@ const Kitchen = lazy(() => import('@/pages/Kitchen'))
 const Fleet = lazy(() => import('@/pages/Fleet'))
 const Lodging = lazy(() => import('@/pages/Lodging'))
 const Colporteurs = lazy(() => import('@/pages/Colporteurs'))
+const Cepevistas = lazy(() => import('@/pages/Cepevistas'))
 
 function FullScreenLoader() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="vehiculos" element={<Fleet />} />
           <Route path="alojamientos" element={<Lodging />} />
           <Route path="colportores" element={<Colporteurs />} />
+          <Route path="cepevistas" element={<Cepevistas />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

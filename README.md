@@ -47,6 +47,11 @@ En **Supabase Studio → SQL Editor**, ejecuta los archivos de la carpeta `supab
 | `04_functions.sql`  | Reglas de negocio como RPC (`kitchen_assign`, `stay_create`, `trip_create`, `sale_register`…). |
 | `05_seed.sql`       | **Opcional.** Escenario de ejemplo: 420 camas, 336 residentes, 12 colportores, 7 vehículos. |
 | `06_admin.sql`      | Asignar el rol `admin` a tu usuario después de registrarte. |
+| `07_reset_kitchen.sql` | Utilidad: limpiar los turnos y publicaciones de cocina. |
+| `08_reset_people.sql`  | Utilidad: limpiar la tabla de personas respetando sus dependencias. |
+| `09_colporteurs.sql`   | Módulo de registro: vista de grilla, borrado protegido y baja lógica. |
+| `10_people_documents.sql` | Documento de identidad y correo electrónico, con unicidad y validación. |
+| `11_cepevistas.sql`    | Tipo de persona `Cepevista` y vista de registro genérica para todos los tipos. |
 
 ### Roles
 
