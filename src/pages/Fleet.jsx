@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Bus, Fuel, MapPin, Plus, Users, Wrench } from 'lucide-react'
+import { Bus, Fuel, Pencil, Plus, Trash2, UserRound, Wrench } from 'lucide-react'
 import { PageHeader, TodayChip } from '@/components/layout/PageHeader'
 import {
   Badge,
   Button,
   Card,
-  CardBody,
   CardHeader,
+  ConfirmDialog,
   Dialog,
   Input,
   KpiCard,
@@ -26,11 +26,25 @@ import {
   useTrips,
   useVehicles,
 } from '@/hooks/useCepev'
-import { VEHICLE_STATUSES } from '@/lib/constants'
+import { VEHICLE_DRIVER_KINDS, VEHICLE_STATUSES, VEHICLE_TYPES, label } from '@/lib/constants'
 import { useAuth } from '@/lib/auth'
 import { addDays, formatCurrency, formatDate, formatDateTime, formatNumber, todayISO } from '@/lib/utils'
 
 const emptyForms = {
+  vehicle: {
+    id: '',
+    plate: '',
+    vehicle_type: VEHICLE_TYPES[0],
+    brand: '',
+    model_year: '',
+    color: '',
+    capacity: 12,
+    odometer_km: 0,
+    next_service_km: '',
+    next_service_date: '',
+    status: 'Disponible',
+    driver_id: '',
+  },
   trip: { vehicle_id: '', driver_id: '', destination_city: '', starts_at: '', ends_at: '' },
   close: { id: '', return_km: '', return_city: 'Piedecuesta' },
   fuel: { vehicle_id: '', liters: '', amount_cop: '', odometer_km: '' },
@@ -52,11 +66,13 @@ export default function Fleet() {
   const tripsQuery = useTrips()
   const fuelQuery = useFuelLogs()
   const maintenanceQuery = useMaintenanceLogs()
-  const driversQuery = usePeople({ kind: 'Conductor', available: true })
+  // Conducen tanto el personal del centro como cepevistas y colportores.
+  const staffQuery = usePeople({ kinds: VEHICLE_DRIVER_KINDS, available: true })
   const actions = useFleetActions()
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({})
+  const [deleting, setDeleting] = useState(null)
 
   const view = searchParams.get('vista') ?? ''
   const vehicles = useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data])
@@ -94,6 +110,7 @@ export default function Fleet() {
   const closeModal = () => setModal(null)
 
   const mutationByModal = {
+    vehicle: actions.saveVehicle,
     trip: actions.createTrip,
     close: actions.closeTrip,
     fuel: actions.registerFuel,
@@ -107,10 +124,36 @@ export default function Fleet() {
 
   const vehicleOptions = vehicles.map((vehicle) => ({
     value: vehicle.id,
-    label: `${vehicle.name} · ${vehicle.status}`,
+    label: `${vehicle.plate} · ${vehicle.name}`,
   }))
 
+  const staffOptions = (staffQuery.data ?? []).map((person) => ({
+    value: person.id,
+    label: `${person.full_name} · ${label(person.kind)}`,
+  }))
+
+  /** Abre el formulario con la ficha cargada, o vacio para un alta. */
+  const editVehicle = (vehicle) =>
+    openModal('vehicle', {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      vehicle_type: vehicle.vehicle_type ?? VEHICLE_TYPES[0],
+      brand: vehicle.brand ?? '',
+      model_year: vehicle.model_year ?? '',
+      color: vehicle.color ?? '',
+      capacity: vehicle.capacity,
+      odometer_km: vehicle.odometer_km,
+      next_service_km: vehicle.next_service_km,
+      next_service_date: vehicle.next_service_date,
+      status: vehicle.status,
+      driver_id: vehicle.driver_id ?? '',
+    })
+
+  const confirmDelete = () =>
+    actions.deleteVehicle.mutate({ id: deleting.id }, { onSuccess: () => setDeleting(null) })
+
   const titles = {
+    vehicle: form.id ? 'Editar ficha del vehículo' : 'Registrar vehículo',
     trip: 'Reservar vehículo y conductor',
     close: 'Registrar devolución',
     fuel: 'Registrar combustible',
@@ -122,10 +165,25 @@ export default function Fleet() {
       <PageHeader title="Vehículos" subtitle="Disponibilidad, recorridos y cuidado de la flota.">
         <TodayChip />
         {canWrite && (
-          <Button onClick={() => openModal('trip', { starts_at: `${todayISO()}T08:00`, ends_at: `${todayISO()}T17:00` })}>
-            <Plus />
-            Reservar vehículo
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => openModal('trip', { starts_at: `${todayISO()}T08:00`, ends_at: `${todayISO()}T17:00` })}
+            >
+              Reservar vehículo
+            </Button>
+            <Button
+              onClick={() =>
+                openModal('vehicle', {
+                  next_service_date: addDays(todayISO(), 90),
+                  next_service_km: 5000,
+                })
+              }
+            >
+              <Plus />
+              Nuevo vehículo
+            </Button>
+          </>
         )}
       </PageHeader>
 
@@ -154,46 +212,76 @@ export default function Fleet() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visibleVehicles.map((vehicle) => (
-            <article key={vehicle.id} className="surface p-5">
-              <div className="mb-4 flex items-center justify-between">
+            <article key={vehicle.id} className="surface flex flex-col p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
                 <span className="rounded-xl bg-navy-50 p-3 text-navy-600">
                   <Bus className="size-6" aria-hidden="true" />
                 </span>
                 <Badge tone={vehicle.status === 'Disponible' ? 'green' : 'gold'}>{vehicle.status}</Badge>
               </div>
-              <h2 className="text-lg font-semibold text-ink">{vehicle.name}</h2>
-              <span className="mt-1 mb-3 inline-block rounded border border-[#ccd6df] px-1.5 py-0.5 text-[11px] tracking-widest">
-                {vehicle.plate}
-              </span>
-              <div className="mb-4 flex flex-wrap gap-3 text-xs text-ink-soft">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="size-3.5" />
-                  {vehicle.current_city}
+
+              <h2 className="text-lg font-semibold text-ink">
+                {vehicle.brand} {label(vehicle.vehicle_type)}
+              </h2>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+                <span className="rounded border border-[#ccd6df] px-1.5 py-0.5 font-semibold tracking-widest text-ink">
+                  {vehicle.plate}
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <Users className="size-3.5" />
-                  {vehicle.capacity} pasajeros
-                </span>
+                {vehicle.model_year && <span>Modelo {vehicle.model_year}</span>}
+                {vehicle.color && <span>· {vehicle.color}</span>}
               </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-[#edf1f5] pt-4">
+
+              <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-[#edf1f5] pt-4">
                 <div>
-                  <small className="block text-[11px] text-ink-soft">Odómetro</small>
-                  <strong className="text-base">{formatNumber(vehicle.odometer_km)} km</strong>
+                  <dt className="text-[11px] text-ink-soft">Kilometraje</dt>
+                  <dd className="text-base font-semibold">{formatNumber(vehicle.odometer_km)} km</dd>
                 </div>
                 <div>
-                  <small className="block text-[11px] text-ink-soft">Próxima revisión</small>
-                  <strong className="text-base">{formatDate(vehicle.next_service_date)}</strong>
+                  <dt className="text-[11px] text-ink-soft">Próximo mantenimiento</dt>
+                  <dd className="text-base font-semibold">
+                    {formatNumber(vehicle.next_service_km)} km
+                    {vehicle.service_due && (
+                      <span className="ml-1 text-xs font-semibold text-gold-700">· Pendiente</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-ink-soft">Capacidad</dt>
+                  <dd className="text-sm">{vehicle.capacity} pasajeros</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-ink-soft">Ciudad actual</dt>
+                  <dd className="text-sm">{vehicle.current_city}</dd>
+                </div>
+              </dl>
+
+              <div className="mt-4 flex items-center gap-2.5 rounded-lg bg-navy-50/70 px-3 py-2.5 text-sm">
+                <UserRound className="size-4 shrink-0 text-navy-500" aria-hidden="true" />
+                <div className="min-w-0">
+                  {vehicle.driver_name ? (
+                    <>
+                      <span className="block truncate font-medium text-ink">{vehicle.driver_name}</span>
+                      <small className="text-xs text-ink-soft">{label(vehicle.driver_kind)}</small>
+                    </>
+                  ) : (
+                    <span className="text-ink-soft">Sin conductor asignado</span>
+                  )}
                 </div>
               </div>
-              <p className="mt-2 text-xs text-ink-soft">
-                O al alcanzar {formatNumber(vehicle.next_service_km)} km
-                {vehicle.service_due && <span className="ml-1 font-semibold text-gold-700">· Pendiente</span>}
+
+              <p className="mt-3 text-xs text-ink-soft">
+                Próxima revisión: {formatDate(vehicle.next_service_date)}
               </p>
+
               {canWrite && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-[#edf1f5] pt-4">
+                  <Button size="sm" variant="secondary" onClick={() => editVehicle(vehicle)}>
+                    <Pencil />
+                    Editar
+                  </Button>
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="ghost"
                     onClick={() => openModal('fuel', { vehicle_id: vehicle.id, odometer_km: vehicle.odometer_km })}
                   >
                     <Fuel />
@@ -214,10 +302,28 @@ export default function Fleet() {
                     <Wrench />
                     Hoja de vida
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-[var(--color-danger-fg)] hover:bg-[var(--color-danger-bg)]"
+                    onClick={() => setDeleting(vehicle)}
+                    aria-label={`Eliminar ${vehicle.plate}`}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               )}
             </article>
           ))}
+          {visibleVehicles.length === 0 && (
+            <Card className="sm:col-span-2 xl:col-span-3">
+              <p className="px-6 py-12 text-center text-sm text-ink-soft">
+                {vehicles.length === 0
+                  ? 'Todavía no hay vehículos registrados.'
+                  : 'Ningún vehículo coincide con el filtro activo.'}
+              </p>
+            </Card>
+          )}
         </div>
       )}
 
@@ -318,6 +424,7 @@ export default function Fleet() {
       <Dialog
         open={Boolean(modal)}
         onClose={closeModal}
+        size={modal === 'vehicle' ? 'lg' : 'md'}
         title={titles[modal] ?? ''}
         description="Los datos quedan registrados en la bitácora del centro."
         footer={
@@ -332,6 +439,83 @@ export default function Fleet() {
         }
       >
         <form id="fleet-form" onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+          {modal === 'vehicle' && (
+            <>
+              <Input
+                label="Placa"
+                required
+                value={form.plate}
+                onChange={update('plate')}
+                placeholder="ABC123"
+                hint="Se guarda en mayúsculas y sin espacios."
+              />
+              <Select
+                label="Tipo de vehículo"
+                required
+                value={form.vehicle_type}
+                onChange={update('vehicle_type')}
+                options={VEHICLE_TYPES.map((type) => ({ value: type, label: label(type) }))}
+              />
+              <Input label="Marca" required value={form.brand} onChange={update('brand')} placeholder="Chevrolet" />
+              <Input
+                label="Año del vehículo"
+                type="number"
+                min="1950"
+                max="2100"
+                value={form.model_year}
+                onChange={update('model_year')}
+                placeholder="2018"
+              />
+              <Input label="Color" value={form.color} onChange={update('color')} placeholder="Blanco" />
+              <Input
+                label="Capacidad de pasajeros"
+                type="number"
+                min="1"
+                required
+                value={form.capacity}
+                onChange={update('capacity')}
+              />
+              <Input
+                label="Kilometraje actual"
+                type="number"
+                min="0"
+                required
+                value={form.odometer_km}
+                onChange={update('odometer_km')}
+              />
+              <Input
+                label="Kilometraje del próximo mantenimiento"
+                type="number"
+                min="1"
+                required
+                value={form.next_service_km}
+                onChange={update('next_service_km')}
+              />
+              <Input
+                label="Fecha de la próxima revisión"
+                type="date"
+                required
+                value={form.next_service_date}
+                onChange={update('next_service_date')}
+              />
+              <Select
+                label="Estado"
+                value={form.status}
+                onChange={update('status')}
+                options={VEHICLE_STATUSES.map((status) => ({ value: status, label: status }))}
+              />
+              <Select
+                label="Conductor a cargo"
+                value={form.driver_id}
+                onChange={update('driver_id')}
+                placeholder="Sin conductor asignado"
+                hint="Cepevistas, colportores y personal del centro."
+                options={staffOptions}
+                className="sm:col-span-2"
+              />
+            </>
+          )}
+
           {modal === 'trip' && (
             <>
               <Select label="Vehículo" required value={form.vehicle_id} onChange={update('vehicle_id')} placeholder="Seleccionar…" options={vehicleOptions} />
@@ -341,7 +525,8 @@ export default function Fleet() {
                 value={form.driver_id}
                 onChange={update('driver_id')}
                 placeholder="Seleccionar…"
-                options={(driversQuery.data ?? []).map((person) => ({ value: person.id, label: person.full_name }))}
+                hint="Cepevistas, colportores y personal disponible."
+                options={staffOptions}
               />
               <Input label="Ciudad de destino" required value={form.destination_city} onChange={update('destination_city')} />
               <div className="hidden sm:block" />
@@ -383,6 +568,20 @@ export default function Fleet() {
           )}
         </form>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+        loading={actions.deleteVehicle.isPending}
+        confirmLabel="Eliminar vehículo"
+        title={deleting ? `Eliminar ${deleting.brand} ${label(deleting.vehicle_type)}` : ''}
+        description={
+          deleting
+            ? `Placa ${deleting.plate}. Si tiene recorridos registrados, el servidor lo impedirá para conservar el historial.`
+            : ''
+        }
+      />
     </>
   )
 }

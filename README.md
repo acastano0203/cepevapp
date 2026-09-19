@@ -44,7 +44,7 @@ En **Supabase Studio → SQL Editor**, ejecuta los archivos de la carpeta `supab
 | `01_schema.sql`     | Extensiones, tipos, tablas, índices y restricciones de exclusión (evitan camas y vehículos con reservas solapadas). |
 | `02_views.sql`      | Funciones de apoyo (`cepev_today`, `person_city_on`, rol del usuario) y vistas de lectura del panel. |
 | `03_rls.sql`        | Row Level Security: quién lee y quién escribe. |
-| `04_functions.sql`  | Reglas de negocio como RPC (`kitchen_assign`, `stay_create`, `trip_create`, `sale_register`…). |
+| `04_functions.sql`  | Reglas de negocio como RPC (`stay_create`, `trip_create`, `sale_register`…). |
 | `05_seed.sql`       | **Opcional.** Escenario de ejemplo: 420 camas, 336 residentes, 12 colportores, 7 vehículos. |
 | `06_admin.sql`      | Asignar el rol `admin` a tu usuario después de registrarte. |
 | `07_reset_kitchen.sql` | Utilidad: limpiar los turnos y publicaciones de cocina. |
@@ -52,6 +52,9 @@ En **Supabase Studio → SQL Editor**, ejecuta los archivos de la carpeta `supab
 | `09_colporteurs.sql`   | Módulo de registro: vista de grilla, borrado protegido y baja lógica. |
 | `10_people_documents.sql` | Documento de identidad y correo electrónico, con unicidad y validación. |
 | `11_cepevistas.sql`    | Tipo de persona `Cepevista` y vista de registro genérica para todos los tipos. |
+| `12_kitchen_dynamic.sql` | Cocina con N puestos por comida: se agregan con `kitchen_add` y se quitan con `kitchen_remove`; los cepevistas pasan a ser personal elegible. |
+| `13_fleet_vehicles.sql` | Ficha completa del vehículo (tipo, marca, año, color, conductor) y alta, edición y borrado desde la aplicación. |
+| `14_reset_fleet.sql`    | Utilidad: limpiar vehículos, recorridos, combustible y hoja de vida. |
 
 ### Roles
 

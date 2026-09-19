@@ -23,6 +23,10 @@ export const LABELS = {
   Desayuno: 'Desayuno',
   Almuerzo: 'Almuerzo',
   Cena: 'Cena',
+  Microbus: 'Microbús',
+  Automovil: 'Automóvil',
+  Camion: 'Camión',
+  Furgon: 'Furgón',
 }
 
 export const label = (value) => LABELS[value] ?? value ?? '—'
@@ -46,11 +50,32 @@ export const PERSON_KINDS = [
   'Cepevista',
 ]
 
-export const KITCHEN_ELIGIBLE_KINDS = ['Logistica', 'Conductor', 'Administrativo']
+export const KITCHEN_ELIGIBLE_KINDS = ['Cepevista', 'Colportor', 'Logistica', 'Conductor', 'Administrativo']
 
 export const SEX_GROUPS = ['Mujeres', 'Hombres']
 
 export const VEHICLE_STATUSES = ['Disponible', 'Mantenimiento', 'Fuera de servicio']
+
+export const VEHICLE_TYPES = [
+  'Bus',
+  'Buseta',
+  'Microbus',
+  'Camioneta',
+  'Automovil',
+  'Campero',
+  'Camion',
+  'Furgon',
+  'Motocicleta',
+]
+
+/** Quien puede quedar a cargo de un vehiculo. */
+export const VEHICLE_DRIVER_KINDS = [
+  'Cepevista',
+  'Colportor',
+  'Logistica',
+  'Conductor',
+  'Administrativo',
+]
 
 export const ROLE_LABELS = {
   admin: 'Administrador',

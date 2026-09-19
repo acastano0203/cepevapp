@@ -1,27 +1,14 @@
-import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { MapPin, ShieldCheck, X } from 'lucide-react'
+import { BrandLogo } from '@/components/layout/BrandLogo'
 import { NAV_ITEMS, ROLE_LABELS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 
 function Logo() {
-  const [failed, setFailed] = useState(false)
-
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-7 pb-5">
-      {failed ? (
-        <div className="flex size-28 items-center justify-center rounded-xl bg-white text-xl font-black tracking-tight text-navy-700">
-          CEPEV
-        </div>
-      ) : (
-        <img
-          src="/logo.jpg"
-          alt="CEPEV · Centro de Perfeccionamiento de Líderes y Colportores"
-          className="size-28 rounded-xl bg-white object-contain p-1.5"
-          onError={() => setFailed(true)}
-        />
-      )}
+      <BrandLogo className="size-28" fallbackClassName="text-xl" />
       <span className="text-[11px] font-bold tracking-[0.19em] text-gold-400">GESTIÓN INTEGRAL</span>
     </div>
   )

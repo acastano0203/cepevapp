@@ -12,6 +12,17 @@ export function Dialog({ open, onClose, title, description, children, footer, si
   const panelRef = useRef(null)
   const previouslyFocused = useRef(null)
 
+  /**
+   * onClose cambia de identidad en cada render del padre. Guardarlo en una
+   * ref deja que el efecto dependa solo de `open`: si dependiera de onClose se
+   * volvería a montar en cada tecla, devolviendo el foco al botón de cerrar y
+   * haciendo imposible escribir en el formulario.
+   */
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!open) return undefined
 
@@ -24,12 +35,18 @@ export function Dialog({ open, onClose, title, description, children, footer, si
         'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ) ?? []
 
-    const timer = window.setTimeout(() => focusable()[0]?.focus(), 30)
+    // Al abrir, el foco va al primer control real; el botón de cerrar solo
+    // recibe el foco si no hay nada más dentro del diálogo.
+    const timer = window.setTimeout(() => {
+      const items = [...focusable()]
+      const target = items.find((item) => !item.hasAttribute('data-dialog-close')) ?? items[0]
+      target?.focus()
+    }, 30)
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onClose?.()
+        onCloseRef.current?.()
         return
       }
       if (event.key !== 'Tab') return
@@ -55,7 +72,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       document.body.style.overflow = overflow
       previouslyFocused.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -86,7 +103,13 @@ export function Dialog({ open, onClose, title, description, children, footer, si
             <h2 className="text-lg font-semibold text-ink">{title}</h2>
             {description && <p className="mt-1 text-sm text-ink-soft">{description}</p>}
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar ventana">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Cerrar ventana"
+            data-dialog-close=""
+          >
             <X />
           </Button>
         </header>

@@ -92,11 +92,29 @@ export const kitchenApi = {
         .lte('service_date', addDays(startDate, 6)),
     ),
 
-  ensureDay: (date) => runQuery(supabase.rpc('kitchen_ensure_day', { p_date: date })),
-  autofill: (date) => runQuery(supabase.rpc('kitchen_autofill', { p_date: date })),
+  autofill: (date, perTask = 3) =>
+    runQuery(supabase.rpc('kitchen_autofill', { p_date: date, p_per_task: perTask })),
   publish: (date) => runQuery(supabase.rpc('kitchen_publish', { p_date: date })),
-  assign: ({ shiftId, personId }) =>
-    runQuery(supabase.rpc('kitchen_assign', { p_shift: shiftId, p_person: personId || null })),
+
+  /** Suma una persona a la grilla de una comida. Los puestos no tienen tope. */
+  add: ({ date, meal, task, personId }) =>
+    runQuery(
+      supabase.rpc('kitchen_add', {
+        p_date: date,
+        p_meal: meal,
+        p_task: task,
+        p_person: personId,
+      }),
+    ),
+
+  /** Quita de la grilla los puestos seleccionados. */
+  remove: async ({ shiftIds }) => {
+    const ids = Array.isArray(shiftIds) ? shiftIds : [shiftIds]
+    for (const id of ids) {
+      await runQuery(supabase.rpc('kitchen_remove', { p_shift: id }))
+    }
+    return ids.length
+  },
 }
 
 /* ===========================================================================
@@ -189,6 +207,28 @@ export const fleetApi = {
         .order('log_date', { ascending: false })
         .limit(limit),
     ),
+
+  /** Alta y edicion de la ficha del vehiculo. Sin id, crea. */
+  saveVehicle: (payload) =>
+    runQuery(
+      supabase.rpc('vehicle_upsert', {
+        p_id: payload.id || null,
+        p_plate: payload.plate,
+        p_type: payload.vehicle_type,
+        p_brand: payload.brand,
+        p_year: payload.model_year ? Number(payload.model_year) : null,
+        p_color: payload.color || null,
+        p_capacity: Number(payload.capacity),
+        p_odometer: Number(payload.odometer_km ?? 0),
+        p_next_km: Number(payload.next_service_km),
+        p_next_date: payload.next_service_date || null,
+        p_status: payload.status,
+        p_driver: payload.driver_id || null,
+      }),
+    ),
+
+  deleteVehicle: ({ id, force = false }) =>
+    runQuery(supabase.rpc('vehicle_delete', { p_id: id, p_force: force })),
 
   createTrip: (payload) =>
     runQuery(

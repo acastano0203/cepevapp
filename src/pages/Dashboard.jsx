@@ -67,7 +67,8 @@ export default function Dashboard() {
   }
 
   const occupancy = percent(data?.beds_occupied, data?.beds_total)
-  const kitchenCoverage = `${data?.kitchen_filled_today ?? 0}/${data?.kitchen_slots_today ?? 0}`
+  const kitchenPeople = data?.kitchen_filled_today ?? 0
+  const mealsMissing = data?.kitchen_meals_missing_today ?? 0
   const salesPercent = percent(data?.books_last_7d, data?.books_goal_7d)
 
   return (
@@ -109,8 +110,8 @@ export default function Dashboard() {
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Cocina"
-          value={kitchenCoverage}
-          detail="Puestos cubiertos hoy"
+          value={kitchenPeople}
+          detail="Personas asignadas hoy"
           tone="gold"
           icon={UtensilsCrossed}
           onClick={() => navigate('/cocina')}
@@ -148,7 +149,11 @@ export default function Dashboard() {
           <AttentionRow
             icon={UtensilsCrossed}
             tone="gold"
-            title={`${(data?.kitchen_slots_today ?? 0) - (data?.kitchen_filled_today ?? 0)} puestos por cubrir en cocina`}
+            title={
+              mealsMissing
+                ? `${mealsMissing} ${mealsMissing === 1 ? 'comida' : 'comidas'} sin equipo en cocina`
+                : 'Las tres comidas tienen equipo'
+            }
             detail="Completa el equipo y publica el calendario"
             onClick={() => navigate('/cocina?vista=faltantes')}
           />

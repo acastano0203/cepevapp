@@ -3,11 +3,15 @@
 --
 --   LISTO PARA EJECUTAR TAL CUAL. Al terminar deja:
 --     - kitchen_publications vacia   (ningun dia publicado)
---     - kitchen_shifts con la parrilla de la semana en curso, sin asignar
+--     - kitchen_shifts vacia         (ninguna comida con equipo)
+--
+--   Desde 12_kitchen_dynamic.sql un puesto existe solo cuando alguien lo
+--   ocupa: no hay parrilla vacia que regenerar. Para volver a armar los
+--   equipos usa "Asignar" o "Generar propuesta" en la aplicacion.
 --
 --   Tablas involucradas (ninguna otra depende de ellas, asi que no se tocan
 --   alojamientos, flota ni colportaje):
---     public.kitchen_shifts        -> los puestos, 18 por dia
+--     public.kitchen_shifts        -> una fila por persona y comida
 --     public.kitchen_publications  -> los dias aprobados y publicados
 --
 --   Al final del archivo hay variantes comentadas por si algun dia necesitas
@@ -20,9 +24,8 @@
 -- ---------------------------------------------------------------------------
 select
   k.service_date,
-  count(*)                      as puestos,
-  count(k.person_id)            as asignados,
-  count(*) - count(k.person_id) as libres,
+  count(*)                      as participantes,
+  count(distinct k.meal)        as comidas_con_equipo,
   (kp.service_date is not null) as publicado
 from public.kitchen_shifts k
 left join public.kitchen_publications kp on kp.service_date = k.service_date
@@ -43,44 +46,37 @@ truncate table public.kitchen_shifts;
 
 
 -- ---------------------------------------------------------------------------
--- PASO 3 · Regenerar la parrilla de la semana en curso
---   18 puestos por dia: 3 comidas x 2 tareas x 3 personas, todos sin asignar.
---   Para cubrirlos, usa "Generar propuesta" en la aplicacion.
+-- PASO 3 · (ya no hace falta regenerar nada)
+--   El modulo arranca vacio y la grilla de cada comida se llena desde la
+--   aplicacion. Si quieres dejar la semana propuesta de una vez, ejecuta:
+--
+--     select public.kitchen_autofill(d::date, 3)
+--       from generate_series(public.cepev_today(),
+--                            public.cepev_today() + 6, interval '1 day') d;
+--
+--   El segundo parametro es cuanta gente quieres por tarea (preparacion y
+--   comedor) en cada comida: ponlo en el numero que necesites.
 -- ---------------------------------------------------------------------------
-insert into public.kitchen_shifts (service_date, meal, task, position_index, starts_at, ends_at)
-select d::date, tpl.meal::public.meal_type, tpl.task::public.kitchen_task, pos, tpl.s, tpl.e
-from generate_series(public.cepev_today(), public.cepev_today() + 6, interval '1 day') d
-cross join (values
-  ('Desayuno','Preparacion','05:00'::time,'07:00'::time),
-  ('Desayuno','Comedor',    '06:00',      '08:00'),
-  ('Almuerzo','Preparacion','10:00',      '12:30'),
-  ('Almuerzo','Comedor',    '11:30',      '14:00'),
-  ('Cena',    'Preparacion','16:00',      '18:00'),
-  ('Cena',    'Comedor',    '17:30',      '20:00')
-) as tpl(meal, task, s, e)
-cross join generate_series(1, 3) as pos
-on conflict (service_date, meal, task, position_index) do nothing;
 
 
 -- ---------------------------------------------------------------------------
 -- PASO 4 · Verificacion
---   Esperado: 126 turnos totales (7 dias x 18), 0 asignados, 0 publicados.
+--   Esperado: todo en cero mientras no vuelvas a armar los equipos.
 -- ---------------------------------------------------------------------------
 select
-  (select count(*) from public.kitchen_shifts)                          as turnos_totales,
-  (select count(*) from public.kitchen_shifts where person_id is not null) as turnos_asignados,
-  (select count(*) from public.kitchen_publications)                    as dias_publicados,
-  (select min(service_date) from public.kitchen_shifts)                 as primer_dia,
-  (select max(service_date) from public.kitchen_shifts)                 as ultimo_dia;
+  (select count(*) from public.kitchen_shifts)       as participaciones,
+  (select count(*) from public.kitchen_publications) as dias_publicados,
+  (select min(service_date) from public.kitchen_shifts) as primer_dia,
+  (select max(service_date) from public.kitchen_shifts) as ultimo_dia;
 
 
 -- ============================================================================
 -- VARIANTES (comentadas) · para limpiezas parciales
 -- ============================================================================
 
--- A) Solo liberar las asignaciones, conservando la parrilla existente:
--- update public.kitchen_shifts set person_id = null;
--- delete from public.kitchen_publications;
+-- A) Vaciar solo un dia, conservando el resto de la semana:
+-- delete from public.kitchen_shifts       where service_date = public.cepev_today();
+-- delete from public.kitchen_publications where service_date = public.cepev_today();
 
 -- B) Limpiar un rango de fechas concreto:
 -- delete from public.kitchen_publications
@@ -95,4 +91,4 @@ select
 -- D) Borrar tambien el rastro del modulo en la bitacora
 --    (por defecto se conserva como historial de lo ocurrido):
 -- delete from public.audit_log
---  where action in ('kitchen_assign', 'kitchen_autofill', 'kitchen_publish');
+--  where action in ('kitchen_add', 'kitchen_remove', 'kitchen_autofill', 'kitchen_publish');

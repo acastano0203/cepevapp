@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CalendarDays, ClipboardList, Plus, Send, TriangleAlert, UserCheck } from 'lucide-react'
+import { CalendarDays, ClipboardList, Send, TriangleAlert, Trash2, UserPlus } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import {
   Badge,
@@ -35,31 +35,43 @@ function findConflicts(shifts = []) {
   return conflicts
 }
 
-function SlotRow({ shift, conflict, canWrite, onAssign }) {
-  const filled = Boolean(shift.person_id)
-
+/** Una fila de la grilla: se marca para poder quitarla. */
+function ParticipantRow({ shift, conflict, selectable, selected, onToggle }) {
   return (
-    <div
+    <label
       className={cn(
-        'flex min-h-11 items-center gap-2 py-2 text-sm',
-        !filled && 'my-1 rounded-lg border border-dashed border-gold-300 bg-gold-50/60 px-3',
-        conflict && 'rounded-lg bg-[var(--color-danger-bg)] px-3',
+        'flex min-h-11 cursor-pointer items-start gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors',
+        selected ? 'bg-navy-50' : 'hover:bg-navy-50/50',
+        conflict && 'bg-[var(--color-danger-bg)]',
+        !selectable && 'cursor-default',
       )}
     >
-      {filled ? (
-        <UserCheck className={cn('size-4 shrink-0', conflict ? 'text-[var(--color-danger-fg)]' : 'text-emerald-600')} />
+      {selectable ? (
+        <input
+          type="checkbox"
+          className="mt-1 size-4 shrink-0 accent-[#1f3b57]"
+          checked={selected}
+          onChange={() => onToggle(shift.id)}
+        />
       ) : (
-        <Plus className="size-4 shrink-0 text-gold-600" />
+        <span className="mt-1 size-4 shrink-0" aria-hidden="true" />
       )}
-      <span className="min-w-0 flex-1 truncate">
-        {shift.person_name ?? <span className="text-gold-700">Puesto libre</span>}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          {conflict && (
+            <TriangleAlert
+              className="size-3.5 shrink-0 text-[var(--color-danger-fg)]"
+              aria-label="Asignación con conflicto"
+            />
+          )}
+          <span className="truncate font-medium text-ink">{shift.person_name}</span>
+        </span>
+        <span className="block text-xs text-ink-soft">
+          {label(shift.task)} · {formatTime(shift.starts_at)}–{formatTime(shift.ends_at)}
+          {shift.person_kind ? ` · ${label(shift.person_kind)}` : ''}
+        </span>
       </span>
-      {canWrite && (
-        <Button variant="ghost" size="sm" onClick={() => onAssign(shift)}>
-          {filled ? 'Cambiar' : 'Asignar'}
-        </Button>
-      )}
-    </div>
+    </label>
   )
 }
 
@@ -68,8 +80,10 @@ export default function Kitchen() {
   const { canWrite } = useAuth()
 
   const [date, setDate] = useState(todayISO())
-  const [editing, setEditing] = useState(null)
+  const [assigning, setAssigning] = useState(null) // comida sobre la que se asigna
   const [selectedPerson, setSelectedPerson] = useState('')
+  const [selectedTask, setSelectedTask] = useState(TASKS[0])
+  const [selected, setSelected] = useState(() => new Set()) // puestos marcados para quitar
 
   const view = searchParams.get('vista') ?? ''
   const dayQuery = useKitchenDay(date)
@@ -79,15 +93,23 @@ export default function Kitchen() {
 
   const shifts = useMemo(() => dayQuery.data ?? [], [dayQuery.data])
   const conflicts = useMemo(() => findConflicts(shifts), [shifts])
-  const filled = shifts.filter((shift) => shift.person_id).length
-  const open = shifts.length - filled
   const published = shifts[0]?.is_published ?? false
 
-  const visibleShifts = useMemo(() => {
-    if (view === 'faltantes') return shifts.filter((shift) => !shift.person_id)
-    if (view === 'conflictos') return shifts.filter((shift) => conflicts.has(shift.id))
-    return shifts
-  }, [shifts, view, conflicts])
+  const byMeal = useMemo(() => {
+    const map = new Map(MEALS.map((meal) => [meal, []]))
+    shifts.forEach((shift) => map.get(shift.meal)?.push(shift))
+    return map
+  }, [shifts])
+
+  const mealsWithoutTeam = MEALS.filter((meal) => (byMeal.get(meal) ?? []).length === 0)
+
+  /** Comidas que quedan a la vista con el filtro activo. */
+  const mealsToShow = MEALS.filter((meal) => {
+    const list = byMeal.get(meal) ?? []
+    if (view === 'faltantes') return list.length === 0
+    if (view === 'conflictos') return list.some((shift) => conflicts.has(shift.id))
+    return true
+  })
 
   const setView = (next) => {
     const params = new URLSearchParams(searchParams)
@@ -96,17 +118,48 @@ export default function Kitchen() {
     setSearchParams(params, { replace: true })
   }
 
-  const openAssign = (shift) => {
-    setEditing(shift)
-    setSelectedPerson(shift.person_id ?? '')
+  const toggle = (id) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const openAssign = (meal) => {
+    setAssigning(meal)
+    setSelectedTask(TASKS[0])
+    setSelectedPerson('')
   }
 
   const submitAssign = (event) => {
     event.preventDefault()
-    actions.assign.mutate(
-      { shiftId: editing.id, personId: selectedPerson || null },
-      { onSuccess: () => setEditing(null) },
+    actions.add.mutate(
+      { date, meal: assigning, task: selectedTask, personId: selectedPerson },
+      { onSuccess: () => setAssigning(null) },
     )
+  }
+
+  const removeSelected = (meal) => {
+    const ids = (byMeal.get(meal) ?? []).filter((shift) => selected.has(shift.id)).map((shift) => shift.id)
+    if (!ids.length) return
+    actions.remove.mutate(
+      { shiftIds: ids },
+      {
+        onSuccess: () =>
+          setSelected((current) => {
+            const next = new Set(current)
+            ids.forEach((id) => next.delete(id))
+            return next
+          }),
+      },
+    )
+  }
+
+  /** Quien todavía no está en esa comida: evita proponer un duplicado. */
+  const availableFor = (meal) => {
+    const taken = new Set((byMeal.get(meal) ?? []).map((shift) => shift.person_id))
+    return (staffQuery.data ?? []).filter((person) => !taken.has(person.id))
   }
 
   return (
@@ -121,7 +174,10 @@ export default function Kitchen() {
             value={date}
             min={todayISO()}
             max={addDays(todayISO(), 30)}
-            onChange={(event) => setDate(event.target.value || todayISO())}
+            onChange={(event) => {
+              setDate(event.target.value || todayISO())
+              setSelected(new Set())
+            }}
           />
         </label>
         {canWrite && (
@@ -133,12 +189,17 @@ export default function Kitchen() {
       </PageHeader>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Cobertura de turnos" value={`${filled}/${shifts.length}`} detail="Preparación y comedor" onClick={() => setView('')} />
         <KpiCard
-          label="Puestos sin cubrir"
-          value={open}
-          detail={open ? 'Requiere asignación' : 'Equipo completo'}
-          tone={open ? 'gold' : 'green'}
+          label="Participantes del día"
+          value={shifts.length}
+          detail="Preparación y comedor"
+          onClick={() => setView('')}
+        />
+        <KpiCard
+          label="Comidas sin equipo"
+          value={mealsWithoutTeam.length}
+          detail={mealsWithoutTeam.length ? mealsWithoutTeam.join(', ') : 'Las tres comidas cubiertas'}
+          tone={mealsWithoutTeam.length ? 'gold' : 'green'}
           onClick={() => setView('faltantes')}
         />
         <KpiCard
@@ -151,7 +212,7 @@ export default function Kitchen() {
         <KpiCard
           label="Personal elegible"
           value={staffQuery.data?.length ?? 0}
-          detail="Logística, conducción y administración"
+          detail="Cepevistas, colportores, logística, conducción y administración"
         />
       </div>
 
@@ -173,7 +234,7 @@ export default function Kitchen() {
       {view && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-navy-50 px-4 py-2.5 text-sm">
           <span>
-            Vista: {view === 'faltantes' ? 'Puestos sin cubrir' : 'Asignaciones con conflicto'}
+            Vista: {view === 'faltantes' ? 'Comidas sin equipo' : 'Asignaciones con conflicto'}
           </span>
           <button type="button" className="font-semibold text-navy-600" onClick={() => setView('')}>
             Mostrar todo ×
@@ -187,27 +248,31 @@ export default function Kitchen() {
             <Skeleton key={meal} className="h-80" />
           ))}
         </div>
-      ) : shifts.length === 0 ? (
+      ) : mealsToShow.length === 0 ? (
         <Card>
-          <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
-            <TriangleAlert className="size-8 text-gold-500" />
-            <p className="text-sm text-ink-soft">Este día todavía no tiene puestos creados.</p>
-            {canWrite && (
-              <Button onClick={() => actions.ensureDay.mutate()} loading={actions.ensureDay.isPending}>
-                Crear los 18 puestos del día
-              </Button>
-            )}
-          </div>
+          <p className="px-6 py-12 text-center text-sm text-ink-soft">
+            {view === 'faltantes'
+              ? 'Las tres comidas del día ya tienen equipo.'
+              : 'Ninguna asignación del día tiene conflictos.'}
+          </p>
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
           {MEALS.map((meal, index) => {
-            const mealShifts = shifts.filter((shift) => shift.meal === meal)
-            const mealVisible = visibleShifts.filter((shift) => shift.meal === meal)
-            const mealFilled = mealShifts.filter((shift) => shift.person_id).length
+            const mealShifts = byMeal.get(meal) ?? []
+            const visible =
+              view === 'conflictos' ? mealShifts.filter((shift) => conflicts.has(shift.id)) : mealShifts
+            const marked = mealShifts.filter((shift) => selected.has(shift.id)).length
+            const removingHere =
+              actions.remove.isPending &&
+              (actions.remove.variables?.shiftIds ?? []).some((id) =>
+                mealShifts.some((shift) => shift.id === id),
+              )
+
+            if (!mealsToShow.includes(meal)) return null
 
             return (
-              <Card key={meal}>
+              <Card key={meal} className="flex flex-col">
                 <div className="flex items-center gap-3 border-b border-[#edf1f5] bg-[#f9fbfd] px-4 py-4">
                   <span className="rounded-md bg-gold-100 px-2 py-1.5 text-xs font-semibold text-gold-700">
                     0{index + 1}
@@ -216,39 +281,49 @@ export default function Kitchen() {
                     <h2 className="font-semibold text-ink">{meal}</h2>
                     <p className="text-xs text-ink-soft">{MEAL_WINDOW[meal]}</p>
                   </div>
-                  <Badge tone={mealFilled === mealShifts.length ? 'green' : 'gold'}>
-                    {mealFilled}/{mealShifts.length}
+                  <Badge tone={mealShifts.length ? 'green' : 'gold'}>
+                    {mealShifts.length} {mealShifts.length === 1 ? 'persona' : 'personas'}
                   </Badge>
                 </div>
 
-                {TASKS.map((task) => {
-                  const taskShifts = mealVisible.filter((shift) => shift.task === task)
-                  const reference = mealShifts.find((shift) => shift.task === task)
+                <div className="flex-1 px-2 py-2">
+                  {visible.length === 0 ? (
+                    <p className="px-2 py-6 text-center text-xs text-ink-soft">
+                      {mealShifts.length === 0
+                        ? 'Todavía no hay nadie en esta comida.'
+                        : 'Sin puestos en esta vista.'}
+                    </p>
+                  ) : (
+                    visible.map((shift) => (
+                      <ParticipantRow
+                        key={shift.id}
+                        shift={shift}
+                        conflict={conflicts.has(shift.id)}
+                        selectable={canWrite}
+                        selected={selected.has(shift.id)}
+                        onToggle={toggle}
+                      />
+                    ))
+                  )}
+                </div>
 
-                  return (
-                    <div key={task} className="border-t border-[#edf1f5] px-4 py-3 first:border-0">
-                      <h3 className="mb-1 flex items-center justify-between gap-2 text-[13px] font-semibold">
-                        {label(task)}
-                        <small className="text-[11px] font-normal text-ink-soft">
-                          {formatTime(reference?.starts_at)}–{formatTime(reference?.ends_at)}
-                        </small>
-                      </h3>
-                      {taskShifts.length === 0 ? (
-                        <p className="py-2 text-xs text-ink-soft">Sin puestos en esta vista.</p>
-                      ) : (
-                        taskShifts.map((shift) => (
-                          <SlotRow
-                            key={shift.id}
-                            shift={shift}
-                            conflict={conflicts.has(shift.id)}
-                            canWrite={canWrite}
-                            onAssign={openAssign}
-                          />
-                        ))
-                      )}
-                    </div>
-                  )
-                })}
+                {canWrite && (
+                  <div className="flex flex-col gap-2 border-t border-[#edf1f5] px-4 py-3">
+                    <Button onClick={() => openAssign(meal)}>
+                      <UserPlus />
+                      Asignar
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={marked === 0}
+                      loading={removingHere}
+                      onClick={() => removeSelected(meal)}
+                    >
+                      <Trash2 />
+                      Quitar{marked > 0 ? ` (${marked})` : ''}
+                    </Button>
+                  </div>
+                )}
               </Card>
             )
           })}
@@ -265,16 +340,17 @@ export default function Kitchen() {
             <button
               key={day.date}
               type="button"
-              onClick={() => setDate(day.date)}
+              onClick={() => {
+                setDate(day.date)
+                setSelected(new Set())
+              }}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-lg border border-line px-2 py-3 text-[13px] transition',
                 date === day.date ? 'border-navy-500 bg-navy-50' : 'hover:bg-navy-50/60',
               )}
             >
               <span className="capitalize">{formatDate(day.date)}</span>
-              <strong className="text-lg">
-                {day.filled}/{day.total}
-              </strong>
+              <strong className="text-lg">{day.total}</strong>
               <small className="text-[11px] text-ink-soft">
                 {day.published ? 'Publicado' : 'Borrador'}
               </small>
@@ -284,41 +360,45 @@ export default function Kitchen() {
       </Card>
 
       <Dialog
-        open={Boolean(editing)}
-        onClose={() => setEditing(null)}
-        title="Asignar persona al turno"
-        description={
-          editing
-            ? `${editing.meal} · ${label(editing.task)} · ${formatTime(editing.starts_at)}–${formatTime(editing.ends_at)}`
-            : ''
-        }
+        open={Boolean(assigning)}
+        onClose={() => setAssigning(null)}
+        title="Asignar persona a la comida"
+        description={assigning ? `${assigning} · ${MEAL_WINDOW[assigning]}` : ''}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
+            <Button variant="secondary" onClick={() => setAssigning(null)}>
               Cancelar
             </Button>
-            <Button type="submit" form="assign-form" loading={actions.assign.isPending}>
-              Guardar
+            <Button type="submit" form="assign-form" loading={actions.add.isPending} disabled={!selectedPerson}>
+              Agregar a la grilla
             </Button>
           </>
         }
       >
         <form id="assign-form" onSubmit={submitAssign} className="flex flex-col gap-4">
+          <Select
+            label="Tarea"
+            value={selectedTask}
+            onChange={(event) => setSelectedTask(event.target.value)}
+            options={TASKS.map((task) => ({ value: task, label: label(task) }))}
+          />
           <QueryBoundary query={staffQuery} loadingLabel="Cargando personal…">
             <Select
               label="Persona asignada"
               value={selectedPerson}
               onChange={(event) => setSelectedPerson(event.target.value)}
-              placeholder="Dejar el puesto libre"
-              options={(staffQuery.data ?? []).map((person) => ({
+              placeholder="Elige a quien participa"
+              hint="Cepevistas y colportores también pueden cubrir turnos de cocina."
+              options={(assigning ? availableFor(assigning) : []).map((person) => ({
                 value: person.id,
                 label: `${person.full_name} · ${label(person.kind)}`,
               }))}
             />
           </QueryBoundary>
           <p className="rounded-lg bg-navy-50 px-3 py-2.5 text-[13px] text-ink-soft">
-            El servidor rechaza a quien esté fuera de la sede, tenga otro turno cruzado o un
-            recorrido asignado en ese horario.
+            Puedes agregar tantas personas como necesites. El servidor rechaza a quien tenga otro
+            turno cruzado, un recorrido asignado en ese horario o cuyo equipo esté de rotación en
+            otra ciudad ese día.
           </p>
         </form>
       </Dialog>

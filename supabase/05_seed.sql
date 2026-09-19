@@ -130,14 +130,28 @@ begin
   ---------------------------------------------------------------------------
   -- Vehiculos
   ---------------------------------------------------------------------------
-  insert into public.vehicles (name, plate, current_city, status, odometer_km, capacity, next_service_date, next_service_km) values
-    ('Van 01',        'DEMO-101', 'Piedecuesta',  'Disponible',         82450, 12, v_today + 1,  90000),
-    ('Van 02',        'DEMO-102', 'Bucaramanga',  'Disponible',         83950, 12, v_today + 35, 91500),
-    ('Van 03',        'DEMO-103', 'Piedecuesta',  'Mantenimiento',      85450, 12, v_today,      85000),
-    ('Bus 01',        'DEMO-104', 'Piedecuesta',  'Disponible',         86950, 40, v_today + 35, 94500),
-    ('Camioneta 01',  'DEMO-105', 'Piedecuesta',  'Disponible',         88450, 12, v_today + 35, 96000),
-    ('Van 04',        'DEMO-106', 'Piedecuesta',  'Disponible',         89950, 12, v_today + 35, 97500),
-    ('Bus 02',        'DEMO-107', 'Piedecuesta',  'Disponible',         91450, 40, v_today + 35, 99000);
+  insert into public.vehicles
+    (name, plate, vehicle_type, brand, model_year, color, current_city, status,
+     odometer_km, capacity, next_service_date, next_service_km) values
+    ('Chevrolet Microbus',  'DEMO-101', 'Microbus',   'Chevrolet', 2016, 'Blanco', 'Piedecuesta', 'Disponible',    82450, 12, v_today + 1,  90000),
+    ('Chevrolet Microbus',  'DEMO-102', 'Microbus',   'Chevrolet', 2017, 'Blanco', 'Bucaramanga', 'Disponible',    83950, 12, v_today + 35, 91500),
+    ('Renault Microbus',    'DEMO-103', 'Microbus',   'Renault',   2015, 'Gris',   'Piedecuesta', 'Mantenimiento', 85450, 12, v_today,      85000),
+    ('Hino Bus',            'DEMO-104', 'Bus',        'Hino',      2019, 'Azul',   'Piedecuesta', 'Disponible',    86950, 40, v_today + 35, 94500),
+    ('Toyota Camioneta',    'DEMO-105', 'Camioneta',  'Toyota',    2020, 'Negro',  'Piedecuesta', 'Disponible',    88450, 12, v_today + 35, 96000),
+    ('Renault Microbus',    'DEMO-106', 'Microbus',   'Renault',   2018, 'Blanco', 'Piedecuesta', 'Disponible',    89950, 12, v_today + 35, 97500),
+    ('Hino Bus',            'DEMO-107', 'Bus',        'Hino',      2021, 'Azul',   'Piedecuesta', 'Disponible',    91450, 40, v_today + 35, 99000);
+
+  -- Cada vehiculo queda a cargo de un conductor del centro
+  with conductores as (
+    select id, row_number() over (order by full_name) as rn
+      from public.people where kind = 'Conductor'
+  ), flota as (
+    select id, row_number() over (order by plate) as rn from public.vehicles
+  )
+  update public.vehicles v
+     set driver_id = c.id
+    from flota f join conductores c on c.rn = f.rn
+   where v.id = f.id;
 
   insert into public.maintenance_logs (vehicle_id, detail, cost_cop)
   select id, 'Revision de frenos en taller', 280000 from public.vehicles where plate = 'DEMO-103';
@@ -155,32 +169,30 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Turnos de cocina para la semana en curso (18 puestos por dia)
+-- Cocina: equipos del dia de hoy
+--   Un puesto existe solo cuando alguien lo ocupa (ver 12_kitchen_dynamic.sql).
+--   La cena se deja sin equipo a proposito, para que el panel de inicio tenga
+--   un pendiente real que mostrar.
 -- ---------------------------------------------------------------------------
-insert into public.kitchen_shifts (service_date, meal, task, position_index, starts_at, ends_at)
-select d::date, tpl.meal::public.meal_type, tpl.task::public.kitchen_task, pos, tpl.s, tpl.e
-from generate_series(public.cepev_today(), public.cepev_today() + 6, interval '1 day') d
-cross join (values
-  ('Desayuno','Preparacion','05:00'::time,'07:00'::time),
-  ('Desayuno','Comedor',    '06:00',      '08:00'),
-  ('Almuerzo','Preparacion','10:00',      '12:30'),
-  ('Almuerzo','Comedor',    '11:30',      '14:00'),
-  ('Cena',    'Preparacion','16:00',      '18:00'),
-  ('Cena',    'Comedor',    '17:30',      '20:00')
-) as tpl(meal, task, s, e)
-cross join generate_series(1, 3) as pos
-on conflict (service_date, meal, task, position_index) do nothing;
-
--- Cubre parcialmente el dia de hoy para que el panel muestre pendientes reales
-with candidatos as (
-  select id, row_number() over (order by full_name) as rn
-    from public.people where kind in ('Logistica', 'Conductor')
-), puestos as (
-  select id, row_number() over (order by meal, task, position_index) as rn
-    from public.kitchen_shifts
-   where service_date = public.cepev_today()
+with plantilla as (
+  select *, row_number() over (order by meal, task, pos) - 1 as seq
+    from (values
+      ('Desayuno','Preparacion','05:00'::time,'07:00'::time),
+      ('Desayuno','Comedor',    '06:00',      '08:00'),
+      ('Almuerzo','Preparacion','10:00',      '12:30'),
+      ('Almuerzo','Comedor',    '11:30',      '14:00')
+    ) as tpl(meal, task, s, e)
+    cross join generate_series(1, 3) as pos
+), elegibles as (
+  select id, row_number() over (order by full_name) - 1 as rn
+    from public.people
+   where kind in ('Logistica', 'Conductor', 'Administrativo')
+     and is_available
 )
-update public.kitchen_shifts k
-   set person_id = c.id
-  from puestos p join candidatos c on c.rn = p.rn
- where k.id = p.id and p.rn <= 13;
+insert into public.kitchen_shifts
+  (service_date, meal, task, position_index, starts_at, ends_at, person_id)
+select public.cepev_today(), p.meal::public.meal_type, p.task::public.kitchen_task,
+       p.pos, p.s, p.e, e.id
+  from plantilla p
+  join elegibles e on e.rn = p.seq
+on conflict (service_date, meal, task, position_index) do nothing;

@@ -94,13 +94,12 @@ export const useKitchenWeek = (startDate = todayISO()) =>
       const map = new Map()
       for (let i = 0; i < 7; i += 1) {
         const date = addDays(startDate, i)
-        map.set(date, { date, total: 0, filled: 0, published: false })
+        map.set(date, { date, total: 0, published: false })
       }
       rows.forEach((row) => {
         const entry = map.get(row.service_date)
         if (!entry) return
         entry.total += 1
-        if (row.person_id) entry.filled += 1
         entry.published = entry.published || row.is_published
       })
       return [...map.values()]
@@ -118,12 +117,12 @@ export const useKitchenActions = (date) => {
       success: 'Calendario de cocina publicado',
       invalidate,
     }),
-    assign: useAppMutation(kitchenApi.assign, {
-      success: 'Turno actualizado',
+    add: useAppMutation(kitchenApi.add, {
+      success: (data) => `${data?.meal ?? 'Comida'}: persona agregada a la grilla`,
       invalidate,
     }),
-    ensureDay: useAppMutation(() => kitchenApi.ensureDay(date), {
-      success: 'Puestos del día creados',
+    remove: useAppMutation(kitchenApi.remove, {
+      success: (count) => (count === 1 ? 'Puesto retirado' : `${count} puestos retirados`),
       invalidate,
     }),
   }
@@ -167,6 +166,14 @@ export const useMaintenanceLogs = () =>
 const FLEET_KEYS = [qk.vehicles, qk.trips, qk.fuel, qk.maintenance]
 
 export const useFleetActions = () => ({
+  saveVehicle: useAppMutation(fleetApi.saveVehicle, {
+    success: (_data, variables) => (variables.id ? 'Ficha del vehículo actualizada' : 'Vehículo registrado'),
+    invalidate: FLEET_KEYS,
+  }),
+  deleteVehicle: useAppMutation(fleetApi.deleteVehicle, {
+    success: 'Vehículo eliminado',
+    invalidate: FLEET_KEYS,
+  }),
   createTrip: useAppMutation(fleetApi.createTrip, {
     success: 'Vehículo y conductor reservados',
     invalidate: FLEET_KEYS,
