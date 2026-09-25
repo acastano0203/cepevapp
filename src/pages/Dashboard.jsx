@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bus,
   CircleCheck,
+  ClipboardList,
   UtensilsCrossed,
   Wrench,
 } from 'lucide-react'
@@ -19,29 +20,41 @@ import {
   QueryBoundary,
   Skeleton,
 } from '@/components/ui'
-import { useAudit, useDashboard } from '@/hooks/useCepev'
-import { formatNumber, percent, relativeTime } from '@/lib/utils'
+import { useAudit, useDashboard, useRoomIssues } from '@/hooks/useCepev'
+import { cn, formatNumber, percent, relativeTime } from '@/lib/utils'
 
-function AttentionRow({ icon: Icon, tone = 'navy', title, detail, onClick }) {
-  const tones = {
-    navy: 'bg-navy-50 text-navy-600',
-    gold: 'bg-gold-100 text-gold-700',
-  }
+/** Color del contador según la gravedad del pendiente. */
+const SEVERITY = {
+  high: 'bg-[var(--color-danger-bg)] text-[var(--color-danger-fg)]',
+  medium: 'bg-gold-100 text-gold-700',
+}
 
+function AttentionRow({ icon: Icon, count, severity = 'medium', title, detail, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 border-b border-[#edf1f5] px-4 py-4 text-left last:border-0 hover:bg-navy-50/50 sm:px-6"
+      className="group flex w-full items-center gap-4 border-b border-[#edf1f5] px-4 py-3.5 text-left transition last:border-0 hover:bg-navy-50/60 sm:px-6"
     >
-      <span className={`rounded-xl p-3 ${tones[tone]}`}>
-        <Icon className="size-5" aria-hidden="true" />
+      <span
+        className={cn(
+          'flex h-12 min-w-12 shrink-0 items-center justify-center rounded-xl px-2 text-xl font-semibold tabular-nums',
+          SEVERITY[severity],
+        )}
+      >
+        {formatNumber(count)}
       </span>
       <span className="min-w-0 flex-1">
-        <strong className="block text-sm font-semibold text-ink">{title}</strong>
+        <strong className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <Icon className="size-4 shrink-0 text-ink-soft" aria-hidden="true" />
+          <span className="truncate">{title}</span>
+        </strong>
         <small className="mt-0.5 block text-xs text-ink-soft">{detail}</small>
       </span>
-      <ArrowRight className="size-4 shrink-0 text-navy-300" aria-hidden="true" />
+      <ArrowRight
+        className="size-4 shrink-0 text-navy-300 transition group-hover:translate-x-0.5 group-hover:text-navy-600"
+        aria-hidden="true"
+      />
     </button>
   )
 }
@@ -50,6 +63,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const dashboard = useDashboard()
   const audit = useAudit(6)
+  const issues = useRoomIssues()
   const data = dashboard.data
 
   if (dashboard.isPending) {
@@ -70,6 +84,80 @@ export default function Dashboard() {
   const kitchenPeople = data?.kitchen_filled_today ?? 0
   const mealsMissing = data?.kitchen_meals_missing_today ?? 0
   const salesPercent = percent(data?.books_last_7d, data?.books_goal_7d)
+
+  const openIssues = (issues.data ?? []).filter((issue) => issue.status === 'Abierta')
+  const urgentIssues = openIssues.filter((issue) => issue.priority === 'Urgente').length
+
+  /**
+   * Pendientes del día. Los que están en cero no son prioridad: se agrupan
+   * al final como "Al día" en lugar de ocupar una fila cada uno.
+   */
+  const attention = [
+    {
+      key: 'cocina',
+      icon: UtensilsCrossed,
+      count: mealsMissing,
+      severity: 'high',
+      title: mealsMissing === 1 ? 'Comida sin equipo en cocina' : 'Comidas sin equipo en cocina',
+      detail: 'Completa el equipo y publica el calendario',
+      done: 'cocina',
+      to: '/cocina?vista=faltantes',
+    },
+    {
+      key: 'llegadas',
+      icon: BedDouble,
+      count: data?.arrivals_pending ?? 0,
+      severity: 'high',
+      title: 'Llegadas sin cama asignada',
+      detail: 'Consulta disponibilidad y registra la reserva',
+      done: 'llegadas',
+      to: '/alojamientos?vista=llegadas',
+    },
+    {
+      key: 'novedades',
+      icon: ClipboardList,
+      count: openIssues.length,
+      severity: urgentIssues > 0 ? 'high' : 'medium',
+      title: openIssues.length === 1 ? 'Novedad abierta en dormitorios' : 'Novedades abiertas en dormitorios',
+      detail: urgentIssues > 0 ? `${urgentIssues} urgente${urgentIssues === 1 ? '' : 's'} · mantenimiento, quejas y más` : 'Mantenimiento, limpieza, quejas y convivencia',
+      done: 'novedades',
+      to: '/alojamientos',
+    },
+    {
+      key: 'salidas',
+      icon: CircleCheck,
+      count: data?.checkouts_pending ?? 0,
+      severity: 'medium',
+      title: 'Salidas por confirmar',
+      detail: 'La cama sigue ocupada hasta confirmar la salida',
+      done: 'salidas',
+      to: '/alojamientos?vista=salidas',
+    },
+    {
+      key: 'mantenimiento',
+      icon: Wrench,
+      count: data?.vehicles_service_due ?? 0,
+      severity: 'medium',
+      title: 'Vehículos con mantenimiento pendiente',
+      detail: 'Próximos 7 días o kilometraje alcanzado',
+      done: 'vehículos',
+      to: '/vehiculos?vista=mantenimiento',
+    },
+    {
+      key: 'reportes',
+      icon: BookOpen,
+      count: data?.sales_missing_today ?? 0,
+      severity: 'medium',
+      title: 'Colportores sin reporte hoy',
+      detail: 'Un reporte pendiente no es lo mismo que cero ventas',
+      done: 'reportes',
+      to: '/colportores?vista=faltantes',
+    },
+  ]
+  const pending = attention
+    .filter((item) => item.count > 0)
+    .sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'high' ? -1 : 1))
+  const upToDate = attention.filter((item) => item.count === 0)
 
   return (
     <>
@@ -140,52 +228,46 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-        <Card>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <Card className="self-start">
           <CardHeader
             title="Necesita tu atención"
             description="Prioridades para la coordinación de hoy"
-          />
-          <AttentionRow
-            icon={UtensilsCrossed}
-            tone="gold"
-            title={
-              mealsMissing
-                ? `${mealsMissing} ${mealsMissing === 1 ? 'comida' : 'comidas'} sin equipo en cocina`
-                : 'Las tres comidas tienen equipo'
+            action={
+              <Badge tone={pending.length ? (pending.some((item) => item.severity === 'high') ? 'red' : 'gold') : 'green'}>
+                {pending.length ? `${pending.length} pendiente${pending.length === 1 ? '' : 's'}` : 'Todo al día'}
+              </Badge>
             }
-            detail="Completa el equipo y publica el calendario"
-            onClick={() => navigate('/cocina?vista=faltantes')}
           />
-          <AttentionRow
-            icon={BedDouble}
-            title={`${data?.arrivals_pending ?? 0} llegadas sin cama asignada`}
-            detail="Consulta disponibilidad y registra la reserva"
-            onClick={() => navigate('/alojamientos?vista=llegadas')}
-          />
-          <AttentionRow
-            icon={CircleCheck}
-            tone="gold"
-            title={`${data?.checkouts_pending ?? 0} salidas por confirmar`}
-            detail="La cama sigue ocupada hasta confirmar la salida"
-            onClick={() => navigate('/alojamientos?vista=salidas')}
-          />
-          <AttentionRow
-            icon={Wrench}
-            title={`${data?.vehicles_service_due ?? 0} mantenimientos por atender`}
-            detail="Próximos 7 días o kilometraje alcanzado"
-            onClick={() => navigate('/vehiculos?vista=mantenimiento')}
-          />
-          <AttentionRow
-            icon={BookOpen}
-            tone="gold"
-            title={`${data?.sales_missing_today ?? 0} colportores sin reporte hoy`}
-            detail="Un reporte pendiente no es lo mismo que cero ventas"
-            onClick={() => navigate('/colportores?vista=faltantes')}
-          />
+          {pending.map((item) => (
+            <AttentionRow
+              key={item.key}
+              icon={item.icon}
+              count={item.count}
+              severity={item.severity}
+              title={item.title}
+              detail={item.detail}
+              onClick={() => navigate(item.to)}
+            />
+          ))}
+          {pending.length === 0 && (
+            <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+              <CircleCheck className="size-8 text-[var(--color-success-fg)]" aria-hidden="true" />
+              <strong className="text-sm font-semibold text-ink">No hay pendientes para hoy</strong>
+              <small className="text-xs text-ink-soft">Cocina, alojamientos, vehículos y reportes están al día.</small>
+            </div>
+          )}
+          {pending.length > 0 && upToDate.length > 0 && (
+            <div className="flex items-start gap-2 bg-[var(--color-success-bg)] px-4 py-3 text-xs text-[var(--color-success-fg)] sm:px-6">
+              <CircleCheck className="mt-px size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong className="font-semibold">Al día:</strong> {upToDate.map((item) => item.done).join(', ')}.
+              </span>
+            </div>
+          )}
         </Card>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Card>
             <CardHeader
               title="Ocupación de la sede"
@@ -225,7 +307,7 @@ export default function Dashboard() {
                     className="flex items-center gap-3 border-b border-[#edf1f5] px-4 py-3 text-sm last:border-0 sm:px-6"
                   >
                     <CircleCheck className="size-4 shrink-0 text-navy-300" aria-hidden="true" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1" title={entry.summary}>
                       <span className="block truncate">{entry.summary}</span>
                       <small className="text-xs text-ink-soft">
                         {entry.actor_name} · {relativeTime(entry.occurred_at)}
