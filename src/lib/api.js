@@ -92,8 +92,15 @@ export const kitchenApi = {
         .lte('service_date', addDays(startDate, 6)),
     ),
 
-  autofill: (date, perTask = 3) =>
-    runQuery(supabase.rpc('kitchen_autofill', { p_date: date, p_per_task: perTask })),
+  /** Cupo de servidores (minimo y maximo) de cada comida. */
+  limits: () =>
+    runQuery(supabase.from('kitchen_meal_limits').select('meal, min_people, max_people')),
+
+  setLimits: ({ meal, min, max }) =>
+    runQuery(supabase.rpc('kitchen_set_limits', { p_meal: meal, p_min: min, p_max: max })),
+
+  /** La propuesta completa cada comida hasta su minimo de servidores. */
+  autofill: (date) => runQuery(supabase.rpc('kitchen_autofill', { p_date: date })),
   publish: (date) => runQuery(supabase.rpc('kitchen_publish', { p_date: date })),
 
   /** Suma una persona a la grilla de una comida. Los puestos no tienen tope. */
@@ -106,6 +113,27 @@ export const kitchenApi = {
         p_person: personId,
       }),
     ),
+
+  /**
+   * Suma varias personas a la misma comida y tarea. Sigue con las demás si el
+   * servidor rechaza a alguna, y devuelve quiénes entraron y quiénes no.
+   */
+  addMany: async ({ date, meal, task, people }) => {
+    const added = []
+    const failed = []
+    for (const person of people) {
+      try {
+        await kitchenApi.add({ date, meal, task, personId: person.id })
+        added.push(person)
+      } catch (error) {
+        failed.push({ person, message: error.message })
+      }
+    }
+    if (!added.length && failed.length) {
+      throw new Error(failed.map((f) => `${f.person.full_name}: ${f.message}`).join(' · '))
+    }
+    return { meal, added, failed }
+  },
 
   /** Quita de la grilla los puestos seleccionados. */
   remove: async ({ shiftIds }) => {
@@ -134,16 +162,22 @@ export const lodgingApi = {
     runQuery(
       supabase
         .from('stays')
-        .select('id, start_date, end_date, status, checked_in_at, people(id, full_name), beds(label, rooms(code))')
+        .select('id, start_date, end_date, status, checked_in_at, people(id, full_name), stay_children(full_name, age), beds(label, rooms!room_id(code))')
         .order('created_at', { ascending: false })
         .limit(limit),
+    ),
+
+  /** Reservas y estadías vigentes: sirven para saber qué camas están libres en unas fechas. */
+  activeStays: () =>
+    runQuery(
+      supabase.from('stays').select('id, bed_id, person_id, start_date, end_date, stay_children(full_name, age)').in('status', ['Reservado', 'Alojado']),
     ),
 
   pendingCheckouts: () =>
     runQuery(
       supabase
         .from('stays')
-        .select('id, start_date, end_date, status, people(id, full_name), beds(label, rooms(code))')
+        .select('id, start_date, end_date, status, people(id, full_name), stay_children(full_name, age), beds(label, rooms!room_id(code))')
         .eq('status', 'Alojado')
         .lte('end_date', todayISO())
         .order('end_date'),
@@ -168,11 +202,58 @@ export const lodgingApi = {
         p_start: payload.start_date,
         p_end: payload.end_date,
         p_notes: payload.notes ?? null,
+        // Niños de 5 años o menos que duermen en la misma cama del adulto
+        p_children: payload.has_children ? payload.children.map((child) => ({ full_name: child.full_name.trim(), age: Number(child.age) })) : null,
       }),
     ),
 
   checkIn: (stayId) => runQuery(supabase.rpc('stay_check_in', { p_stay: stayId })),
   checkOut: (stayId) => runQuery(supabase.rpc('stay_check_out', { p_stay: stayId })),
+
+  /** Crea o edita un dormitorio; el servidor ajusta sus camas al número pedido. */
+  saveRoom: (payload) =>
+    runQuery(
+      supabase.rpc('room_upsert', {
+        p_id: payload.id ?? null,
+        p_code: payload.code,
+        p_sex: payload.sex,
+        p_bunks: Number(payload.bunks),
+        p_captain: payload.captain_id || null,
+        p_captain_phone: payload.captain_phone,
+        p_captain_bed: payload.captain_bed || '01',
+        // Solo cuenta al cambiar de capitán: si el anterior se queda y en qué cama
+        p_old_captain_stays: Boolean(payload.old_captain_stays),
+        p_old_captain_bed: payload.old_captain_stays ? payload.old_captain_bed || null : null,
+        p_old_captain_end: payload.old_captain_stays ? payload.old_captain_end || null : null,
+      }),
+    ),
+
+  /** Novedades de los dormitorios (mantenimiento, quejas…), las más recientes primero. */
+  roomIssues: () =>
+    runQuery(
+      supabase
+        .from('room_issues')
+        .select('id, room_id, category, priority, detail, status, reported_by_name, resolution, resolved_at, resolved_by_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ),
+
+  createRoomIssue: (payload) =>
+    runQuery(
+      supabase.rpc('room_issue_create', {
+        p_room: payload.room_id,
+        p_category: payload.category,
+        p_detail: payload.detail,
+        p_priority: payload.priority,
+      }),
+    ),
+
+  resolveRoomIssue: ({ id, resolution }) =>
+    runQuery(supabase.rpc('room_issue_resolve', { p_issue: id, p_resolution: resolution || null })),
+
+  reopenRoomIssue: (id) => runQuery(supabase.rpc('room_issue_reopen', { p_issue: id })),
+
+  deleteRoom: ({ id, force = false }) => runQuery(supabase.rpc('room_delete', { p_id: id, p_force: force })),
 }
 
 /* ===========================================================================

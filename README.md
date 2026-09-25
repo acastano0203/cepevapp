@@ -55,6 +55,12 @@ En **Supabase Studio → SQL Editor**, ejecuta los archivos de la carpeta `supab
 | `12_kitchen_dynamic.sql` | Cocina con N puestos por comida: se agregan con `kitchen_add` y se quitan con `kitchen_remove`; los cepevistas pasan a ser personal elegible. |
 | `13_fleet_vehicles.sql` | Ficha completa del vehículo (tipo, marca, año, color, conductor) y alta, edición y borrado desde la aplicación. |
 | `14_reset_fleet.sql`    | Utilidad: limpiar vehículos, recorridos, combustible y hoja de vida. |
+| `15_kitchen_gender.sql` | Cocina separada por género: en una misma comida no se mezclan cepevistas ni colportores hombres y mujeres. |
+| `16_kitchen_limits.sql` | Mínimo y máximo de servidores por comida: tope al asignar, propuesta hasta el mínimo y validación al publicar. |
+| `17_lodging_rooms.sql`  | Dormitorios desde la aplicación: crear, editar y eliminar con sus camarotes (cama inferior y superior) y su capitán o capitana (un cepevista o colportor de la misma sección, con WhatsApp y cama reservada). |
+| `18_reset_lodging.sql`  | Utilidad: borrar los dormitorios de ejemplo, sus camas y las estadías. |
+| `19_lodging_children.sql` | Niños de 5 años o menos: se registran en la reserva del adulto y duermen en su misma cama. |
+| `20_room_issues.sql` | Novedades de cada dormitorio (mantenimiento, limpieza, quejas, convivencia): registrar, resolver y reabrir. |
 
 ### Roles
 

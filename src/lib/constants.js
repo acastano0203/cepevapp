@@ -54,6 +54,9 @@ export const KITCHEN_ELIGIBLE_KINDS = ['Cepevista', 'Colportor', 'Logistica', 'C
 
 export const SEX_GROUPS = ['Mujeres', 'Hombres']
 
+/** En cocina, estos tipos no se mezclan por genero dentro de una misma comida. */
+export const KITCHEN_GENDER_KINDS = ['Cepevista', 'Colportor']
+
 export const VEHICLE_STATUSES = ['Disponible', 'Mantenimiento', 'Fuera de servicio']
 
 export const VEHICLE_TYPES = [

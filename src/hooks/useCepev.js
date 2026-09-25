@@ -11,10 +11,13 @@ export const qk = {
   teams: ['teams'],
   kitchenDay: (date) => ['kitchen', 'day', date],
   kitchenWeek: (date) => ['kitchen', 'week', date],
+  kitchenLimits: ['kitchen', 'limits'],
   beds: ['lodging', 'beds'],
   stays: ['lodging', 'stays'],
   arrivals: ['lodging', 'arrivals'],
   checkouts: ['lodging', 'checkouts'],
+  activeStays: ['lodging', 'active-stays'],
+  roomIssues: ['lodging', 'room-issues'],
   vehicles: ['fleet', 'vehicles'],
   trips: ['fleet', 'trips'],
   fuel: ['fleet', 'fuel'],
@@ -106,6 +109,15 @@ export const useKitchenWeek = (startDate = todayISO()) =>
     },
   })
 
+/** Cupo por comida como mapa { Desayuno: { min, max }, ... }. */
+export const useKitchenLimits = () =>
+  useQuery({
+    queryKey: qk.kitchenLimits,
+    queryFn: kitchenApi.limits,
+    select: (rows) =>
+      Object.fromEntries(rows.map((row) => [row.meal, { min: row.min_people, max: row.max_people }])),
+  })
+
 export const useKitchenActions = (date) => {
   const invalidate = [['kitchen']]
   return {
@@ -117,8 +129,13 @@ export const useKitchenActions = (date) => {
       success: 'Calendario de cocina publicado',
       invalidate,
     }),
-    add: useAppMutation(kitchenApi.add, {
-      success: (data) => `${data?.meal ?? 'Comida'}: persona agregada a la grilla`,
+    add: useAppMutation(kitchenApi.addMany, {
+      success: ({ meal, added }) =>
+        `${meal}: ${added.length === 1 ? '1 persona agregada' : `${added.length} personas agregadas`} a la grilla`,
+      invalidate,
+    }),
+    setLimits: useAppMutation(kitchenApi.setLimits, {
+      success: (_data, { meal, min, max }) => `${meal}: cupo de ${min} a ${max} servidores`,
       invalidate,
     }),
     remove: useAppMutation(kitchenApi.remove, {
@@ -134,10 +151,12 @@ export const useKitchenActions = (date) => {
 export const useBeds = () => useQuery({ queryKey: qk.beds, queryFn: lodgingApi.beds })
 export const useStays = () => useQuery({ queryKey: qk.stays, queryFn: () => lodgingApi.stays() })
 export const useArrivals = () => useQuery({ queryKey: qk.arrivals, queryFn: lodgingApi.arrivalsWithoutBed })
+export const useRoomIssues = () => useQuery({ queryKey: qk.roomIssues, queryFn: lodgingApi.roomIssues })
+export const useActiveStays = () => useQuery({ queryKey: qk.activeStays, queryFn: lodgingApi.activeStays })
 export const usePendingCheckouts = () =>
   useQuery({ queryKey: qk.checkouts, queryFn: lodgingApi.pendingCheckouts })
 
-const LODGING_KEYS = [qk.beds, qk.stays, qk.arrivals, qk.checkouts]
+const LODGING_KEYS = [qk.beds, qk.stays, qk.arrivals, qk.checkouts, qk.activeStays, qk.roomIssues]
 
 export const useLodgingActions = () => ({
   createStay: useAppMutation(lodgingApi.createStay, {
@@ -150,6 +169,26 @@ export const useLodgingActions = () => ({
   }),
   checkOut: useAppMutation(lodgingApi.checkOut, {
     success: 'Salida confirmada, cama liberada',
+    invalidate: LODGING_KEYS,
+  }),
+  saveRoom: useAppMutation(lodgingApi.saveRoom, {
+    success: (_data, variables) => (variables.id ? 'Dormitorio actualizado' : 'Dormitorio creado'),
+    invalidate: LODGING_KEYS,
+  }),
+  createRoomIssue: useAppMutation(lodgingApi.createRoomIssue, {
+    success: 'Novedad registrada',
+    invalidate: [qk.roomIssues],
+  }),
+  resolveRoomIssue: useAppMutation(lodgingApi.resolveRoomIssue, {
+    success: 'Novedad resuelta',
+    invalidate: [qk.roomIssues],
+  }),
+  reopenRoomIssue: useAppMutation(lodgingApi.reopenRoomIssue, {
+    success: 'Novedad reabierta',
+    invalidate: [qk.roomIssues],
+  }),
+  deleteRoom: useAppMutation(lodgingApi.deleteRoom, {
+    success: 'Dormitorio eliminado',
     invalidate: LODGING_KEYS,
   }),
 })

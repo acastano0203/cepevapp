@@ -114,3 +114,10 @@ export function matches(haystack, needle) {
   if (!needle) return true
   return normalize(haystack).includes(normalize(needle))
 }
+
+/** Enlace de WhatsApp; a un celular colombiano de 10 digitos le antepone el 57. */
+export function whatsappUrl(phone = '') {
+  const digits = String(phone ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  return `https://wa.me/${digits.length === 10 && digits.startsWith('3') ? `57${digits}` : digits}`
+}
