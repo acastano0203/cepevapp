@@ -18,8 +18,10 @@ export const REGISTRY_CONFIG = {
     // Campos propios de este tipo
     showTeam: true,
     showGoal: true,
+    showClassification: true,
     showResults: true,
     showBed: false,
+    showLicense: false,
     defaultGoal: 10,
     goalLabel: 'Meta diaria (libros)',
     metrics: {
@@ -38,8 +40,10 @@ export const REGISTRY_CONFIG = {
     icon: GraduationCap,
     showTeam: false,
     showGoal: false,
+    showClassification: false,
     showResults: false,
     showBed: true,
+    showLicense: true,
     defaultGoal: 0,
     metrics: {
       totalLabel: 'Cepevistas registrados',

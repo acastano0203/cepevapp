@@ -58,6 +58,10 @@ export const peopleApi = {
         p_document_type: payload.document_type || null,
         p_document_id: payload.document_id || null,
         p_email: payload.email || null,
+        p_has_license: Boolean(payload.has_driver_license),
+        p_license_number: payload.has_driver_license ? payload.license_number || null : null,
+        p_license_expiry: payload.has_driver_license ? payload.license_expiry || null : null,
+        p_classification: payload.classification || null,
       }),
     ),
 

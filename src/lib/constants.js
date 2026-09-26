@@ -54,6 +54,15 @@ export const KITCHEN_ELIGIBLE_KINDS = ['Cepevista', 'Colportor', 'Logistica', 'C
 
 export const SEX_GROUPS = ['Mujeres', 'Hombres']
 
+/** Clasificación de los colportores. value = lo que guarda public.people. */
+export const PERSON_CLASSIFICATIONS = [
+  { value: 'Cepevista', label: 'Cepevista' },
+  { value: 'Ejercito Celestial', label: 'Ejército Celestial' },
+  { value: 'Colportores', label: 'Colportores' },
+  { value: 'Adolescentes', label: 'Adolescentes' },
+  { value: 'Servidores', label: 'Servidores' },
+]
+
 /** En cocina, estos tipos no se mezclan por genero dentro de una misma comida. */
 export const KITCHEN_GENDER_KINDS = ['Cepevista', 'Colportor']
 
