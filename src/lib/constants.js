@@ -1,9 +1,10 @@
-import { BedDouble, BookOpen, Bus, GraduationCap, House, UtensilsCrossed } from 'lucide-react'
+import { BedDouble, BookOpen, Bus, GraduationCap, House, UtensilsCrossed, WashingMachine } from 'lucide-react'
 
 /** Menu lateral. Agregar un modulo = agregar una entrada aqui + su ruta. */
 export const NAV_ITEMS = [
   { to: '/', label: 'Inicio', icon: House, description: 'Una mirada a la operacion del centro' },
   { to: '/cocina', label: 'Cocina', icon: UtensilsCrossed, description: 'Personas y turnos para cada comida' },
+  { to: '/lavanderia', label: 'Lavandería', icon: WashingMachine, description: 'Cuatro lavadoras, dos turnos y coordinación diaria' },
   { to: '/vehiculos', label: 'Vehiculos', icon: Bus, description: 'Disponibilidad, recorridos y cuidado de la flota' },
   { to: '/alojamientos', label: 'Alojamientos', icon: BedDouble, description: 'Cada persona, en el lugar adecuado' },
   { to: '/colportores', label: 'Colportores', icon: BookOpen, description: 'Equipos, ciudades y resultados diarios' },
