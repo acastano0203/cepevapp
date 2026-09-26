@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { colporteurApi, dashboardApi, fleetApi, kitchenApi, lodgingApi, peopleApi } from '@/lib/api'
+import { colporteurApi, dashboardApi, fleetApi, kitchenApi, laundryApi, lodgingApi, peopleApi } from '@/lib/api'
 import { addDays, todayISO } from '@/lib/utils'
 
 /** Claves de cache centralizadas: evita invalidaciones dispersas. */
@@ -60,7 +60,7 @@ export const usePeople = (filters) =>
 
 export const useTeams = () => useQuery({ queryKey: qk.teams, queryFn: peopleApi.teams })
 
-const PEOPLE_KEYS = [['people'], ['colporteurs'], qk.progress, qk.arrivals]
+const PEOPLE_KEYS = [['laundry'], ['kitchen'], ['people'], ['colporteurs'], qk.progress, qk.arrivals]
 
 export const useSavePerson = () =>
   useAppMutation(peopleApi.upsert, {
@@ -107,7 +107,7 @@ export const useKitchenWeek = (startDate = todayISO()) =>
   })
 
 export const useKitchenActions = (date) => {
-  const invalidate = [['kitchen']]
+  const invalidate = [['kitchen'], ['laundry']]
   return {
     autofill: useAppMutation(() => kitchenApi.autofill(date), {
       success: (count) => `Propuesta generada: ${count} puestos asignados`,
@@ -163,7 +163,7 @@ export const useFuelLogs = () => useQuery({ queryKey: qk.fuel, queryFn: () => fl
 export const useMaintenanceLogs = () =>
   useQuery({ queryKey: qk.maintenance, queryFn: () => fleetApi.maintenance() })
 
-const FLEET_KEYS = [qk.vehicles, qk.trips, qk.fuel, qk.maintenance]
+const FLEET_KEYS = [['laundry'], qk.vehicles, qk.trips, qk.fuel, qk.maintenance]
 
 export const useFleetActions = () => ({
   saveVehicle: useAppMutation(fleetApi.saveVehicle, {
@@ -207,7 +207,7 @@ export const useSales = (from, to) =>
 export const useRotations = () =>
   useQuery({ queryKey: qk.rotations, queryFn: colporteurApi.rotations })
 
-const COLPORTEUR_KEYS = [qk.progress, ['colporteurs'], qk.rotations]
+const COLPORTEUR_KEYS = [['laundry'], qk.progress, ['colporteurs'], qk.rotations]
 
 export const useColporteurActions = () => ({
   registerSale: useAppMutation(colporteurApi.registerSale, {
@@ -223,3 +223,30 @@ export const useColporteurActions = () => ({
     invalidate: COLPORTEUR_KEYS,
   }),
 })
+
+export const useLaundryDay = (date) => useQuery({
+  queryKey: ['laundry', 'day', date], queryFn: () => laundryApi.day(date), enabled: Boolean(date),
+})
+
+export const useLaundryWeek = (startDate = todayISO()) => useQuery({
+  queryKey: ['laundry', 'week', startDate],
+  queryFn: () => laundryApi.week(startDate),
+  select: (rows) => Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(startDate, i)
+    const day = rows.filter((row) => row.service_date === date)
+    return { date, total: day.filter((row) => row.machine > 0).length, published: day.some((row) => row.is_published) }
+  }),
+})
+
+export const useLaundryActions = () => {
+  const invalidate = [['laundry'], ['kitchen']]
+  return {
+    add: useAppMutation(laundryApi.add, { success: 'Lavadora asignada', invalidate }),
+    remove: useAppMutation(laundryApi.remove, { success: 'Cupo liberado', invalidate }),
+    coordinator: useAppMutation(laundryApi.coordinator, { success: 'Coordinación actualizada', invalidate }),
+    autofill: useAppMutation(laundryApi.autofill, {
+      success: (count) => `Propuesta generada: ${count} cupos asignados; coordinación manual`, invalidate,
+    }),
+    publish: useAppMutation(laundryApi.publish, { success: 'Calendario de lavandería publicado', invalidate }),
+  }
+}
