@@ -484,4 +484,6 @@ begin
   return v_added;
 end;
 $fn$;
+-- Delivered on commit so PostgREST discovers the new view and RPCs together.
+notify pgrst, 'reload schema';
 commit;
