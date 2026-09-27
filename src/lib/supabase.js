@@ -38,6 +38,13 @@ export function toFriendlyError(error) {
   if (!error) return 'Ocurrio un error inesperado.'
   const message = error.message ?? String(error)
 
+  if (['PGRST205', 'PGRST202'].includes(error.code)
+    && /\b(?:public\.)?(?:v_laundry_assignments|laundry_\w+)\b/.test(message)) {
+    return 'Lavanderia no esta disponible en la API. Ejecuta supabase/15_laundry.sql ' +
+      'en el SQL Editor del proyecto Supabase configurado y vuelve a cargar la pagina. ' +
+      'La migracion crea la vista y las funciones, y actualiza la cache del esquema.'
+  }
+
   if (error.code === 'P0001' || message.includes('P0001')) {
     return message.replace(/^.*?P0001[:\s]*/i, '')
   }
