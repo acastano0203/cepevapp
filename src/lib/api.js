@@ -24,12 +24,14 @@ export const peopleApi = {
   list: (filters = {}) => {
     let query = supabase
       .from('people')
-      .select('id, full_name, sex, birth_date, phone, base_city, kind, team_id, daily_goal, is_available, teams(name)')
+      .select('id, full_name, sex, birth_date, phone, base_city, kind, team_id, daily_goal, is_available, has_driver_license, license_number, license_expiry, teams(name)')
       .order('full_name')
 
     if (filters.kind) query = query.eq('kind', filters.kind)
     if (filters.kinds?.length) query = query.in('kind', filters.kinds)
     if (filters.available) query = query.eq('is_available', true)
+    // Solo personas con licencia de conduccion vigente
+    if (filters.licensed) query = query.eq('has_driver_license', true).gte('license_expiry', todayISO())
     return runQuery(query)
   },
 
@@ -263,6 +265,8 @@ export const lodgingApi = {
 /* ===========================================================================
  * Flota
  * ======================================================================== */
+const VEHICLE_DOCUMENTS_BUCKET = 'vehicle-documents'
+
 export const fleetApi = {
   vehicles: () => runQuery(supabase.from('v_fleet_status').select('*').order('name')),
 
@@ -293,8 +297,50 @@ export const fleetApi = {
         .limit(limit),
     ),
 
-  /** Alta y edicion de la ficha del vehiculo. Sin id, crea. */
-  saveVehicle: (payload) =>
+  /**
+   * Alta y edicion de la ficha del vehiculo. Sin id, crea.
+   * Despues de guardar la ficha sube la planilla de servicio publico, si se
+   * eligio un archivo, o la retira si el vehiculo paso a particular.
+   */
+  saveVehicle: async (payload) => {
+    const vehicle = await fleetApi.upsertVehicle(payload)
+    const previousFile = payload.public_service_file || null
+
+    if (payload.service_type === 'Publico' && payload.public_service_upload) {
+      const file = payload.public_service_upload
+      const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'pdf'
+      const path = `${vehicle.id}/planilla-servicio-publico-${Date.now()}.${extension}`
+      try {
+        await runQuery(
+          supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).upload(path, file, { contentType: file.type }),
+        )
+        await runQuery(
+          supabase.rpc('vehicle_set_public_service_file', { p_id: vehicle.id, p_path: path, p_file_name: file.name }),
+        )
+      } catch (error) {
+        const partial = new Error(
+          `La ficha se guardó, pero no se pudo subir la planilla (${error.message}). Edita el vehículo para intentarlo de nuevo.`,
+        )
+        partial.vehicleSaved = true
+        throw partial
+      }
+      if (previousFile) await supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).remove([previousFile])
+    } else if ((payload.service_type !== 'Publico' || payload.remove_public_service_file) && previousFile) {
+      await runQuery(
+        supabase.rpc('vehicle_set_public_service_file', { p_id: vehicle.id, p_path: null, p_file_name: null }),
+      )
+      await supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).remove([previousFile])
+    }
+    return vehicle
+  },
+
+  /** Enlace temporal (10 minutos) para ver un documento privado del vehiculo. */
+  documentUrl: async (path) => {
+    const data = await runQuery(supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).createSignedUrl(path, 600))
+    return data.signedUrl
+  },
+
+  upsertVehicle: (payload) =>
     runQuery(
       supabase.rpc('vehicle_upsert', {
         p_id: payload.id || null,
@@ -309,6 +355,14 @@ export const fleetApi = {
         p_next_date: payload.next_service_date || null,
         p_status: payload.status,
         p_driver: payload.driver_id || null,
+        p_ownership: payload.ownership || 'CEPEV',
+        p_owner: payload.ownership === 'Externo' ? payload.owner_id || null : null,
+        p_owner_name:
+          payload.ownership === 'Externo' && !payload.owner_id ? payload.owner_name || null : null,
+        p_owner_phone: payload.ownership === 'Externo' ? payload.owner_phone || null : null,
+        p_service_type: payload.service_type || 'Particular',
+        p_soat_expiry: payload.soat_expiry || null,
+        p_insurance_expiry: payload.insurance_expiry || null,
       }),
     ),
 

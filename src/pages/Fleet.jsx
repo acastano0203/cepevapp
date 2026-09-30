@@ -1,6 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Bus, Fuel, Pencil, Plus, Trash2, UserRound, Wrench } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  Building2,
+  Bus,
+  FileText,
+  Fuel,
+  KeyRound,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+  Wrench,
+} from 'lucide-react'
 import { PageHeader, TodayChip } from '@/components/layout/PageHeader'
 import {
   Badge,
@@ -26,9 +39,49 @@ import {
   useTrips,
   useVehicles,
 } from '@/hooks/useCepev'
-import { VEHICLE_DRIVER_KINDS, VEHICLE_STATUSES, VEHICLE_TYPES, label } from '@/lib/constants'
+import {
+  DOCUMENT_STATUS_TONES,
+  VEHICLE_OWNERSHIPS,
+  VEHICLE_SERVICE_TYPES,
+  VEHICLE_STATUSES,
+  VEHICLE_TYPES,
+  label,
+} from '@/lib/constants'
+import { fleetApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { addDays, formatCurrency, formatDate, formatDateTime, formatNumber, todayISO } from '@/lib/utils'
+
+const DOCUMENT_ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
+const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024
+
+/** Vencimiento de un documento del vehiculo con su alerta. */
+function DocumentRow({ name, expiry, status }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <dt className="text-xs text-ink-soft">{name}</dt>
+      <dd className="flex items-center gap-1.5 text-xs">
+        {expiry && <span className="text-ink">{formatDate(expiry, { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+        <Badge tone={DOCUMENT_STATUS_TONES[status] ?? 'neutral'} className="py-0.5">
+          {status}
+        </Badge>
+      </dd>
+    </div>
+  )
+}
+
+/** Abre la planilla privada con un enlace temporal. */
+async function openDocument(path) {
+  // La pestaña se abre antes de esperar al servidor para que el navegador no la bloquee.
+  const tab = window.open('', '_blank')
+  try {
+    const url = await fleetApi.documentUrl(path)
+    if (tab) tab.location.href = url
+    else window.location.href = url
+  } catch (error) {
+    tab?.close()
+    toast.error(error.message)
+  }
+}
 
 const emptyForms = {
   vehicle: {
@@ -44,6 +97,17 @@ const emptyForms = {
     next_service_date: '',
     status: 'Disponible',
     driver_id: '',
+    ownership: 'CEPEV',
+    owner_id: '',
+    owner_name: '',
+    owner_phone: '',
+    service_type: 'Particular',
+    soat_expiry: '',
+    insurance_expiry: '',
+    public_service_file: '',
+    public_service_file_name: '',
+    public_service_upload: null,
+    remove_public_service_file: false,
   },
   trip: { vehicle_id: '', driver_id: '', destination_city: '', starts_at: '', ends_at: '' },
   close: { id: '', return_km: '', return_city: 'Piedecuesta' },
@@ -66,22 +130,31 @@ export default function Fleet() {
   const tripsQuery = useTrips()
   const fuelQuery = useFuelLogs()
   const maintenanceQuery = useMaintenanceLogs()
-  // Conducen tanto el personal del centro como cepevistas y colportores.
-  const staffQuery = usePeople({ kinds: VEHICLE_DRIVER_KINDS, available: true })
+  // Solo conduce quien tiene licencia de conduccion vigente.
+  const driversQuery = usePeople({ licensed: true })
+  // Propietario de un vehiculo externo: cualquier persona registrada.
+  const ownersQuery = usePeople({})
   const actions = useFleetActions()
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({})
   const [deleting, setDeleting] = useState(null)
+  const [fileInputKey, setFileInputKey] = useState(0)
 
   const view = searchParams.get('vista') ?? ''
-  const vehicles = useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data])
+  const ownership = searchParams.get('propiedad') ?? ''
+  const allVehicles = useMemo(() => vehiclesQuery.data ?? [], [vehiclesQuery.data])
+  const vehicles = useMemo(
+    () => (ownership ? allVehicles.filter((v) => (v.ownership ?? 'CEPEV') === ownership) : allVehicles),
+    [allVehicles, ownership],
+  )
 
   const stats = useMemo(
     () => ({
       available: vehicles.filter((v) => v.status === 'Disponible' && !v.busy_today).length,
       due: vehicles.filter((v) => v.service_due).length,
       blocked: vehicles.filter((v) => v.status !== 'Disponible').length,
+      documents: vehicles.filter((v) => v.documents_alert).length,
       trips: (tripsQuery.data ?? []).filter((t) => t.status === 'Reservado' || t.status === 'En ruta').length,
     }),
     [vehicles, tripsQuery.data],
@@ -91,15 +164,27 @@ export default function Fleet() {
     if (view === 'disponibles') return vehicles.filter((v) => v.status === 'Disponible' && !v.busy_today)
     if (view === 'mantenimiento') return vehicles.filter((v) => v.service_due)
     if (view === 'bloqueados') return vehicles.filter((v) => v.status !== 'Disponible')
+    if (view === 'documentos') return vehicles.filter((v) => v.documents_alert)
     return vehicles
   }, [vehicles, view])
 
-  const setView = (next) => {
+  const setParam = (key) => (next) => {
     const params = new URLSearchParams(searchParams)
-    if (next) params.set('vista', next)
-    else params.delete('vista')
+    if (next) params.set(key, next)
+    else params.delete(key)
     setSearchParams(params, { replace: true })
   }
+  const setView = setParam('vista')
+  const setOwnership = setParam('propiedad')
+
+  const ownershipFilters = [
+    { value: '', label: 'Todos', count: allVehicles.length },
+    ...VEHICLE_OWNERSHIPS.map((option) => ({
+      value: option.value,
+      label: option.value === 'CEPEV' ? 'Propios del CEPEV' : 'Externos',
+      count: allVehicles.filter((v) => (v.ownership ?? 'CEPEV') === option.value).length,
+    })),
+  ]
 
   const openModal = (type, values = {}) => {
     setForm({ ...emptyForms[type], ...values })
@@ -119,7 +204,15 @@ export default function Fleet() {
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    mutationByModal[modal].mutate(form, { onSuccess: closeModal })
+    mutationByModal[modal].mutate(form, {
+      onSuccess: closeModal,
+      // La ficha quedo guardada aunque fallo la planilla: se cierra para no duplicar el alta.
+      onError: (error) => {
+        if (!error.vehicleSaved) return
+        closeModal()
+        vehiclesQuery.refetch()
+      },
+    })
   }
 
   const vehicleOptions = vehicles.map((vehicle) => ({
@@ -127,7 +220,23 @@ export default function Fleet() {
     label: `${vehicle.plate} · ${vehicle.name}`,
   }))
 
-  const staffOptions = (staffQuery.data ?? []).map((person) => ({
+  const driverOption = (person) => ({
+    value: person.id,
+    label: `${person.full_name} · ${label(person.kind)} · Lic. ${person.license_number} (vence ${formatDate(
+      person.license_expiry,
+    )})`,
+  })
+  const drivers = driversQuery.data ?? []
+  const driverOptions = drivers.map(driverOption)
+  // Para un recorrido, ademas, la persona debe figurar como disponible.
+  const tripDriverOptions = drivers.filter((person) => person.is_available).map(driverOption)
+  const driverHint = driversQuery.isPending
+    ? 'Cargando conductores…'
+    : drivers.length === 0
+      ? 'Nadie tiene licencia vigente registrada. Cárgala en la ficha de la persona.'
+      : 'Solo aparecen personas con licencia de conducción vigente.'
+
+  const ownerOptions = (ownersQuery.data ?? []).map((person) => ({
     value: person.id,
     label: `${person.full_name} · ${label(person.kind)}`,
   }))
@@ -146,8 +255,37 @@ export default function Fleet() {
       next_service_km: vehicle.next_service_km,
       next_service_date: vehicle.next_service_date,
       status: vehicle.status,
-      driver_id: vehicle.driver_id ?? '',
+      // Si el conductor asignado ya no tiene licencia vigente, hay que elegir otro.
+      driver_id: vehicle.driver_license_invalid ? '' : (vehicle.driver_id ?? ''),
+      ownership: vehicle.ownership ?? 'CEPEV',
+      owner_id: vehicle.owner_id ?? '',
+      owner_name: vehicle.owner_name ?? '',
+      owner_phone: vehicle.owner_id ? '' : (vehicle.owner_phone ?? ''),
+      service_type: vehicle.service_type ?? 'Particular',
+      soat_expiry: vehicle.soat_expiry ?? '',
+      insurance_expiry: vehicle.insurance_expiry ?? '',
+      public_service_file: vehicle.public_service_file ?? '',
+      public_service_file_name: vehicle.public_service_file_name ?? '',
     })
+
+  const selectUpload = (event) => {
+    const file = event.target.files?.[0] ?? null
+    if (file && file.size > DOCUMENT_MAX_BYTES) {
+      toast.error('El archivo supera los 10 MB.')
+      event.target.value = ''
+      return
+    }
+    setForm((prev) => ({ ...prev, public_service_upload: file }))
+  }
+
+  /** Quita el archivo elegido y deja el selector vacio otra vez. */
+  const discardUpload = () => {
+    setForm((prev) => ({ ...prev, public_service_upload: null }))
+    setFileInputKey((key) => key + 1)
+  }
+
+  /** Marca (o desmarca) la planilla cargada para eliminarla al guardar. */
+  const setRemoveFile = (remove) => setForm((prev) => ({ ...prev, remove_public_service_file: remove }))
 
   const confirmDelete = () =>
     actions.deleteVehicle.mutate({ id: deleting.id }, { onSuccess: () => setDeleting(null) })
@@ -187,11 +325,30 @@ export default function Fleet() {
         )}
       </PageHeader>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Disponibles hoy" value={stats.available} detail="Sin reservas durante el día" tone="green" onClick={() => setView('disponibles')} />
         <KpiCard label="Reservas activas" value={stats.trips} detail="Vehículo y conductor asignados" onClick={() => setView('')} />
         <KpiCard label="Mantenimientos próximos" value={stats.due} detail="7 días o kilometraje alcanzado" tone="gold" onClick={() => setView('mantenimiento')} />
         <KpiCard label="No disponibles" value={stats.blocked} detail="Mantenimiento o fuera de servicio" tone="red" onClick={() => setView('bloqueados')} />
+        <KpiCard label="Documentos por revisar" value={stats.documents} detail="SOAT o todo riesgo a 30 días, o sin planilla" tone="red" onClick={() => setView('documentos')} />
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Propiedad del vehículo">
+        {ownershipFilters.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={ownership === option.value}
+            onClick={() => setOwnership(option.value)}
+            className={
+              ownership === option.value
+                ? 'rounded-full bg-navy-600 px-3.5 py-1.5 text-sm font-semibold text-white'
+                : 'rounded-full bg-navy-50 px-3.5 py-1.5 text-sm font-medium text-navy-600 hover:bg-navy-100'
+            }
+          >
+            {option.label} <span className="opacity-70">({option.count})</span>
+          </button>
+        ))}
       </div>
 
       {view && (
@@ -217,7 +374,15 @@ export default function Fleet() {
                 <span className="rounded-xl bg-navy-50 p-3 text-navy-600">
                   <Bus className="size-6" aria-hidden="true" />
                 </span>
-                <Badge tone={vehicle.status === 'Disponible' ? 'green' : 'gold'}>{vehicle.status}</Badge>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {vehicle.ownership === 'Externo' ? (
+                    <Badge tone="neutral">Externo</Badge>
+                  ) : (
+                    <Badge tone="navy">CEPEV</Badge>
+                  )}
+                  {vehicle.service_type === 'Publico' && <Badge tone="gold">Servicio público</Badge>}
+                  <Badge tone={vehicle.status === 'Disponible' ? 'green' : 'gold'}>{vehicle.status}</Badge>
+                </div>
               </div>
 
               <h2 className="text-lg font-semibold text-ink">
@@ -255,13 +420,78 @@ export default function Fleet() {
                 </div>
               </dl>
 
-              <div className="mt-4 flex items-center gap-2.5 rounded-lg bg-navy-50/70 px-3 py-2.5 text-sm">
+              <div
+                className={`mt-4 rounded-lg border px-3 py-2.5 ${
+                  vehicle.documents_alert ? 'border-gold-500/40 bg-gold-100/40' : 'border-[#edf1f5]'
+                }`}
+              >
+                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-ink-soft">
+                  <ShieldCheck className="size-3.5" aria-hidden="true" />
+                  Documentos
+                </p>
+                <dl className="grid gap-1.5">
+                  <DocumentRow name="SOAT" expiry={vehicle.soat_expiry} status={vehicle.soat_status ?? 'Sin registrar'} />
+                  <DocumentRow
+                    name="Póliza todo riesgo"
+                    expiry={vehicle.insurance_expiry}
+                    status={vehicle.insurance_status ?? 'Sin registrar'}
+                  />
+                  {vehicle.service_type === 'Publico' && (
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-xs text-ink-soft">Planilla servicio público</dt>
+                      <dd className="text-xs">
+                        {vehicle.public_service_file ? (
+                          <button
+                            type="button"
+                            onClick={() => openDocument(vehicle.public_service_file)}
+                            className="inline-flex items-center gap-1 font-semibold text-navy-600 hover:underline"
+                            title={vehicle.public_service_file_name ?? undefined}
+                          >
+                            <FileText className="size-3.5" aria-hidden="true" />
+                            Ver planilla
+                          </button>
+                        ) : (
+                          <Badge tone="red" className="py-0.5">
+                            Sin cargar
+                          </Badge>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+
+              {vehicle.ownership === 'Externo' && (
+                <div className="mt-2 flex items-center gap-2.5 rounded-lg bg-[#eef1f5] px-3 py-2.5 text-sm">
+                  <Building2 className="size-4 shrink-0 text-ink-soft" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <span className="block truncate font-medium text-ink">
+                      {vehicle.owner_display_name ?? 'Propietario sin registrar'}
+                    </span>
+                    <small className="text-xs text-ink-soft">
+                      Propietario{vehicle.owner_kind ? ` · ${label(vehicle.owner_kind)}` : ''}
+                      {vehicle.owner_phone ? ` · ${vehicle.owner_phone}` : ''}
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-2 flex items-center gap-2.5 rounded-lg bg-navy-50/70 px-3 py-2.5 text-sm">
                 <UserRound className="size-4 shrink-0 text-navy-500" aria-hidden="true" />
                 <div className="min-w-0">
                   {vehicle.driver_name ? (
                     <>
                       <span className="block truncate font-medium text-ink">{vehicle.driver_name}</span>
-                      <small className="text-xs text-ink-soft">{label(vehicle.driver_kind)}</small>
+                      <small className="text-xs text-ink-soft">
+                        {label(vehicle.driver_kind)}
+                        {vehicle.driver_license_number && ` · Lic. ${vehicle.driver_license_number}`}
+                      </small>
+                      {vehicle.driver_license_invalid && (
+                        <small className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-[var(--color-danger-fg)]">
+                          <KeyRound className="size-3" aria-hidden="true" />
+                          Sin licencia vigente · reasignar conductor
+                        </small>
+                      )}
                     </>
                   ) : (
                     <span className="text-ink-soft">Sin conductor asignado</span>
@@ -441,6 +671,142 @@ export default function Fleet() {
         <form id="fleet-form" onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
           {modal === 'vehicle' && (
             <>
+              <Select
+                label="Propiedad"
+                required
+                value={form.ownership}
+                onChange={update('ownership')}
+                options={VEHICLE_OWNERSHIPS}
+                className="sm:col-span-2"
+              />
+              {form.ownership === 'Externo' && (
+                <>
+                  <Select
+                    label="Propietario registrado"
+                    value={form.owner_id}
+                    onChange={update('owner_id')}
+                    placeholder="No está registrado"
+                    hint="Cepevista, visitante u otra persona registrada."
+                    options={ownerOptions}
+                    className="sm:col-span-2"
+                  />
+                  {!form.owner_id && (
+                    <>
+                      <Input
+                        label="Nombre del propietario"
+                        required
+                        value={form.owner_name}
+                        onChange={update('owner_name')}
+                        placeholder="Nombre completo"
+                      />
+                      <Input
+                        label="Teléfono del propietario"
+                        type="tel"
+                        value={form.owner_phone}
+                        onChange={update('owner_phone')}
+                        placeholder="3001234567"
+                      />
+                    </>
+                  )}
+                </>
+              )}
+              <Select
+                label="Tipo de servicio"
+                required
+                value={form.service_type}
+                onChange={update('service_type')}
+                options={VEHICLE_SERVICE_TYPES}
+              />
+              <div className="hidden sm:block" />
+              <Input
+                label="Vencimiento del SOAT"
+                type="date"
+                required
+                value={form.soat_expiry}
+                onChange={update('soat_expiry')}
+                hint="Se alerta 30 días antes del vencimiento."
+              />
+              <Input
+                label="Vencimiento póliza todo riesgo"
+                type="date"
+                value={form.insurance_expiry}
+                onChange={update('insurance_expiry')}
+                hint="Opcional. Déjalo vacío si no tiene póliza."
+              />
+              {form.service_type === 'Publico' && (
+                <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
+                  <label htmlFor="public-service-file" className="text-sm font-semibold text-[#536c83]">
+                    Planilla de servicio público
+                  </label>
+
+                  {form.public_service_file && !form.public_service_upload && (
+                    <div
+                      className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                        form.remove_public_service_file ? 'bg-[var(--color-danger-bg)]' : 'bg-navy-50/70'
+                      }`}
+                    >
+                      <FileText className="size-4 shrink-0 text-navy-500" aria-hidden="true" />
+                      <span
+                        className={`min-w-0 flex-1 truncate ${form.remove_public_service_file ? 'line-through text-ink-soft' : ''}`}
+                      >
+                        {form.public_service_file_name || 'Planilla cargada'}
+                      </span>
+                      {form.remove_public_service_file ? (
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setRemoveFile(false)}>
+                          Deshacer
+                        </Button>
+                      ) : (
+                        <>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => openDocument(form.public_service_file)}>
+                            Ver
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-[var(--color-danger-fg)] hover:bg-[var(--color-danger-bg)]"
+                            onClick={() => setRemoveFile(true)}
+                          >
+                            <Trash2 />
+                            Quitar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {form.public_service_upload && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-navy-50/70 px-3 py-2 text-sm">
+                      <FileText className="size-4 shrink-0 text-navy-500" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">Se subirá: {form.public_service_upload.name}</span>
+                      <Button type="button" size="sm" variant="ghost" onClick={discardUpload}>
+                        Descartar
+                      </Button>
+                    </div>
+                  )}
+
+                  <input
+                    key={fileInputKey}
+                    id="public-service-file"
+                    type="file"
+                    accept={DOCUMENT_ACCEPT}
+                    onChange={selectUpload}
+                    className="block w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-navy-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-navy-600 hover:file:bg-navy-100"
+                  />
+                  <span className="text-xs text-ink-soft">
+                    {form.remove_public_service_file
+                      ? 'La planilla se eliminará al guardar. Puedes elegir otro archivo para reemplazarla.'
+                      : form.public_service_file
+                        ? 'Elige otro archivo para reemplazarla. PDF o imagen, hasta 10 MB.'
+                        : 'PDF o imagen, hasta 10 MB.'}
+                  </span>
+                </div>
+              )}
+              {form.service_type !== 'Publico' && form.public_service_file && (
+                <p className="text-xs text-gold-700 sm:col-span-2">
+                  Al guardar como particular se eliminará la planilla de servicio público cargada.
+                </p>
+              )}
               <Input
                 label="Placa"
                 required
@@ -509,8 +875,8 @@ export default function Fleet() {
                 value={form.driver_id}
                 onChange={update('driver_id')}
                 placeholder="Sin conductor asignado"
-                hint="Cepevistas, colportores y personal del centro."
-                options={staffOptions}
+                hint={driverHint}
+                options={driverOptions}
                 className="sm:col-span-2"
               />
             </>
@@ -525,8 +891,8 @@ export default function Fleet() {
                 value={form.driver_id}
                 onChange={update('driver_id')}
                 placeholder="Seleccionar…"
-                hint="Cepevistas, colportores y personal disponible."
-                options={staffOptions}
+                hint={driverHint}
+                options={tripDriverOptions}
               />
               <Input label="Ciudad de destino" required value={form.destination_city} onChange={update('destination_city')} />
               <div className="hidden sm:block" />

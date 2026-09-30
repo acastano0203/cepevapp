@@ -80,13 +80,24 @@ export const VEHICLE_TYPES = [
   'Motocicleta',
 ]
 
-/** Quien puede quedar a cargo de un vehiculo. */
-export const VEHICLE_DRIVER_KINDS = [
-  'Cepevista',
-  'Colportor',
-  'Logistica',
-  'Conductor',
-  'Administrativo',
+/** Tipo de servicio. value = lo que guarda public.vehicles.service_type. */
+export const VEHICLE_SERVICE_TYPES = [
+  { value: 'Particular', label: 'Particular' },
+  { value: 'Publico', label: 'Servicio público' },
+]
+
+/** Estado de un vencimiento (SOAT, todo riesgo) -> tono del Badge. */
+export const DOCUMENT_STATUS_TONES = {
+  Vigente: 'green',
+  'Por vencer': 'gold',
+  Vencido: 'red',
+  'Sin registrar': 'neutral',
+}
+
+/** De quien es el vehiculo. value = lo que guarda public.vehicles.ownership. */
+export const VEHICLE_OWNERSHIPS = [
+  { value: 'CEPEV', label: 'Propio del CEPEV' },
+  { value: 'Externo', label: 'Externo · cepevista o visitante' },
 ]
 
 export const ROLE_LABELS = {
