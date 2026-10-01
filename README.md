@@ -135,3 +135,59 @@ Después del despliegue, añade la URL de Vercel en
 ---
 
 Los datos del `seed` son ficticios y sirven para conocer la aplicación antes de cargar información real.
+
+## Lavandería
+
+Ejecuta `supabase/15_laundry.sql` después de las migraciones funcionales 01–13
+(los archivos de reset 07, 08 y 14 son opcionales y borran datos). Después abre
+**Lavandería** en el menú o `/lavanderia`. Si reinstalas las funciones de cocina,
+vuelve a ejecutar 15 para conservar la integración de horarios.
+
+- Cuatro lavadoras, con un cupo por máquina en cada turno: **11:00–13:00** y
+  **15:00–17:00**, hora de Colombia; ocho cupos diarios.
+- Fechas de hoy a 30 días. Participantes elegibles como en Cocina:
+  cepevistas, colportores, logística, conductores y administrativos disponibles.
+- Un coordinador diario, elegido manualmente entre **todas las personas disponibles**,
+  cubre ambos turnos. No ocupa una lavadora ni puede tener otra asignación simultánea.
+  Cambiar o quitar el coordinador actualiza ambos turnos en una sola transacción.
+- Se validan rotaciones fuera de Piedecuesta y cruces con Cocina, recorridos y
+  Lavandería. Cocina y Flota también rechazan reservas que crucen Lavandería.
+- Generar propuesta llena solo cupos libres, priorizando menos horas asignadas durante
+  los últimos siete días. Nunca elige ni reemplaza al coordinador.
+- Publicar requiere ocho cupos, un coordinador para ambos turnos y cero conflictos.
+  Cambios de asignaciones, disponibilidad o rotaciones relevantes vuelven el día a borrador.
+- Los perfiles de consulta solo leen; coordinación y administración operan mediante
+  RPCs con auditoría. La asignación de responsable no cambia el rol de acceso de una persona.
+
+La migración es transaccional y se puede volver a ejecutar. No aplica cambios a
+Supabase automáticamente: debe ejecutarse en el proyecto antes de usar la página.
+
+### Pruebas de lavandería
+
+Si aparece `Could not find the table 'public.v_laundry_assignments' in the schema cache`,
+ejecuta **todo** `supabase/15_laundry.sql` en el SQL Editor del proyecto indicado por
+`VITE_SUPABASE_URL`. Se puede repetir sin borrar las asignaciones existentes e incluye
+la recarga de la caché de PostgREST al confirmar la transacción. Luego recarga la página.
+Para comprobar que se creó la vista, ejecuta:
+
+```sql
+select to_regclass('public.v_laundry_assignments');
+```
+
+Si devuelve `null`, la migración no se completó: corrige el error que muestre el
+SQL Editor y vuelve a ejecutarla. Si la vista ya existe pero la API no la reconoce,
+puedes solicitar otra recarga con `NOTIFY pgrst, 'reload schema';`.
+
+`tests/laundry.mjs` ejecuta 39 comprobaciones contra PostgreSQL embebido y datos
+ficticios, sin conexión al proyecto Supabase. Usa Node.js 20 o superior:
+
+```bash
+npm install --prefix .laundry-tests.local --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.3.14
+node tests/laundry.mjs .laundry-tests.local/node_modules/@electric-sql/pglite/dist/index.js
+```
+
+El entorno de prueba simula `auth.uid()` y los roles de Supabase. Para cargar la
+migración histórica 10 en una base nueva, elimina primero su vista antigua
+`v_colporteurs`, cuyos campos cambiaron de orden. No modifica esas migraciones.
+Estas pruebas no sustituyen una prueba de interfaz con una sesión real ni una
+prueba de concurrencia con varias conexiones.
