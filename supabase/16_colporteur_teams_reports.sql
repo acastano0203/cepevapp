@@ -1,6 +1,16 @@
 -- Colporteurs: municipality-based teams, rotations, historical reports.
 -- Run after 15_laundry.sql. Re-runnable; existing unrecognized city names are preserved.
 begin;
+
+-- Fail early with an actionable prerequisite instead of a later missing-table error.
+do $preflight$
+begin
+  if to_regclass('public.laundry_assignments') is null
+    or to_regclass('public.laundry_publications') is null then
+    raise exception 'Primero ejecuta supabase/15_laundry.sql completo. Luego ejecuta esta migracion 16 completa.';
+  end if;
+end;
+$preflight$;
 create table if not exists public.colombia_municipalities (
   code text primary key check (code ~ '^[0-9]{5}$'),
   name text not null,
@@ -241,73 +251,55 @@ begin
 end;
 $permissions$;
 
-create or replace view public.v_colporteur_progress as
-select
-  p.id                as person_id,
-  p.full_name,
-  p.daily_goal,
-  public.team_name_on(t.id, public.cepev_today()) as team_name,
-  public.person_city_on(p.id, public.cepev_today()) as current_city,
-  coalesce(sum(sr.books_sold) filter (
-    where sr.report_date >= public.cepev_today() - 6), 0)::int as books_last_7d,
-  coalesce(sum(sr.books_sold) filter (
-    where date_trunc('month', sr.report_date) = date_trunc('month', public.cepev_today())), 0)::int as books_month,
-  count(sr.id) filter (
-    where sr.report_date >= public.cepev_today() - 6)::int as reports_last_7d,
-  max(sr.report_date) as last_report_date
-from public.people p
-left join public.teams t on t.id = p.team_id
-left join public.sales_reports sr on sr.person_id = p.id
-where p.kind = 'Colportor'
-group by p.id, p.full_name, p.daily_goal, t.id;
-create or replace view public.v_people_registry as
-select
-  p.id,
-  p.full_name,
-  p.kind,
-  p.sex,
-  p.birth_date,
-  date_part('year', age(p.birth_date))::int as age,
-  p.document_type,
-  p.document_id,
-  p.email,
-  p.phone,
-  p.base_city,
-  p.team_id,
-  public.team_name_on(t.id, public.cepev_today()) as team_name,
-  p.daily_goal,
-  p.is_available,
-  p.notes,
-  p.created_at,
-  public.person_city_on(p.id, public.cepev_today()) as current_city,
+-- Preserve deployed view columns, their order/types, grants and dependent views.
+-- Some installations extend these views (for example with Laundry counters).
+-- Replacing them with an older fixed SELECT would fail with PostgreSQL 42P16.
+do $preserve_views$
+declare
+  v_name text;
+  v_key text;
+  v_oid oid;
+  v_definition text;
+  v_columns text;
+begin
+  foreach v_name in array array['v_colporteur_progress', 'v_people_registry'] loop
+    v_oid := to_regclass('public.' || v_name);
+    if v_oid is null then
+      raise exception 'Falta la vista %. Ejecuta las migraciones anteriores antes de la 16.', v_name;
+    end if;
+    v_key := case v_name when 'v_colporteur_progress' then 'person_id' else 'id' end;
 
-  -- Alojamiento vigente, util para la ficha de un cepevista
-  (select r.code || ' / ' || b.label
-     from public.stays s
-     join public.beds b  on b.id = s.bed_id
-     join public.rooms r on r.id = b.room_id
-    where s.person_id = p.id
-      and s.status in ('Reservado', 'Alojado')
-      and public.cepev_today() >= s.start_date
-      and public.cepev_today() <  s.end_date
-    limit 1) as current_bed,
+    -- Once the view directly uses team_name_on, a rerun must not wrap it again.
+    if not exists (
+      select 1 from pg_depend d
+      join pg_rewrite r on r.oid = d.objid and d.classid = 'pg_rewrite'::regclass
+      where r.ev_class = v_oid
+        and d.refclassid = 'pg_proc'::regclass
+        and d.refobjid = 'public.team_name_on(uuid,date)'::regprocedure
+    ) then
+      v_definition := regexp_replace(pg_get_viewdef(v_oid, true), ';\s*$', '');
+      select string_agg(
+        case when a.attname = 'team_name' then
+          format(
+            'coalesce(public.team_name_on(team_person.team_id, public.cepev_today()), original.%I)::%s as %I',
+            a.attname, format_type(a.atttypid, a.atttypmod), a.attname
+          )
+        else format('original.%I', a.attname) end,
+        ', ' order by a.attnum
+      ) into v_columns
+      from pg_attribute a
+      where a.attrelid = v_oid and a.attnum > 0 and not a.attisdropped;
 
-  (select count(*) from public.sales_reports sr where sr.person_id = p.id)::int as reports_count,
-  (select coalesce(sum(sr.books_sold), 0)
-     from public.sales_reports sr where sr.person_id = p.id)::int               as books_total,
-  (select max(sr.report_date)
-     from public.sales_reports sr where sr.person_id = p.id)                    as last_report_date,
-  (select count(*) from public.stays s  where s.person_id = p.id)::int          as stays_count,
-  (select count(*) from public.trips tr where tr.driver_id = p.id)::int         as trips_count,
-  (select count(*) from public.kitchen_shifts k where k.person_id = p.id)::int  as shifts_count,
-
-  not exists (select 1 from public.sales_reports sr where sr.person_id = p.id)
-  and not exists (select 1 from public.stays s     where s.person_id = p.id)
-  and not exists (select 1 from public.trips tr    where tr.driver_id = p.id) as can_delete
-from public.people p
-left join public.teams t on t.id = p.team_id;
-alter view public.v_colporteur_progress set (security_invoker=on);
-alter view public.v_people_registry set (security_invoker=on);
+      execute format(
+        'create or replace view public.%I as select %s from (%s) original '
+        'left join public.people team_person on team_person.id = original.%I',
+        v_name, v_columns, v_definition, v_key
+      );
+    end if;
+    execute format('alter view public.%I set (security_invoker = on)', v_name);
+  end loop;
+end;
+$preserve_views$;
 
 create or replace function public.kitchen_block_reason(p_shift uuid, p_person uuid)
 returns text
@@ -445,4 +437,15 @@ create trigger colporteur_team_changed after update of municipality_code on publ
 for each row when (old.municipality_code is distinct from new.municipality_code)
 execute function public.colporteur_team_changed();
 
+-- PostgREST receives this notification only after the transaction commits.
+notify pgrst, 'reload schema';
 commit;
+
+-- All three checks should be true after successful execution.
+select
+  to_regclass('public.v_colporteur_teams') is not null as equipos_disponibles,
+  exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='rotations' and column_name='municipality_code'
+  ) as municipio_rotaciones_disponible,
+  to_regclass('public.v_colporteur_report_rows') is not null as reportes_disponibles;
