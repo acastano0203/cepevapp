@@ -45,6 +45,17 @@ export function toFriendlyError(error) {
       'La migracion crea la vista y las funciones, y actualiza la cache del esquema.'
   }
 
+
+  const colporteurObject = /\b(?:v_colporteur_teams|v_colporteur_report_rows|colporteur_team_save|colporteur_assign_team|colporteur_rotation_save|colporteur_rotation_cancel)\b/.test(message)
+  const municipalityColumn = /\bmunicipality_code\b/.test(message)
+  if ((['PGRST205', 'PGRST202'].includes(error.code) && colporteurObject)
+    || (['PGRST204', '42703'].includes(error.code) && municipalityColumn)) {
+    return 'Falta actualizar la base de datos de Colportores. Ejecuta el archivo completo ' +
+      'supabase/16_colporteur_teams_reports.sql en el SQL Editor del mismo proyecto Supabase ' +
+      'configurado en la app, despues de la migracion 15. Al terminar, verifica que los tres ' +
+      'resultados sean true y vuelve a cargar la pagina. El archivo tambien actualiza la cache del esquema.'
+  }
+
   if (error.code === 'P0001' || message.includes('P0001')) {
     return message.replace(/^.*?P0001[:\s]*/i, '')
   }

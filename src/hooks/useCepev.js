@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { colporteurApi, dashboardApi, fleetApi, kitchenApi, laundryApi, lodgingApi, peopleApi } from '@/lib/api'
+import { colporteurManagementApi, colporteurApi, dashboardApi, fleetApi, kitchenApi, laundryApi, lodgingApi, peopleApi } from '@/lib/api'
 import { addDays, todayISO } from '@/lib/utils'
 
 /** Claves de cache centralizadas: evita invalidaciones dispersas. */
@@ -246,9 +246,21 @@ export const useSales = (from, to) =>
 export const useRotations = () =>
   useQuery({ queryKey: qk.rotations, queryFn: colporteurApi.rotations })
 
-const COLPORTEUR_KEYS = [['laundry'], qk.progress, ['colporteurs'], qk.rotations]
+const COLPORTEUR_KEYS = [['people'], ['teams'], ['kitchen'], ['laundry'], qk.progress, ['colporteurs'], qk.rotations]
 
 export const useColporteurActions = () => ({
+  saveTeam: useAppMutation(colporteurManagementApi.saveTeam, {
+    success: 'Equipo actualizado', invalidate: COLPORTEUR_KEYS,
+  }),
+  assignTeam: useAppMutation(colporteurManagementApi.assignTeam, {
+    success: 'Asignación actualizada', invalidate: COLPORTEUR_KEYS,
+  }),
+  saveRotation: useAppMutation(colporteurManagementApi.saveRotation, {
+    success: 'Rotación guardada', invalidate: COLPORTEUR_KEYS,
+  }),
+  cancelRotation: useAppMutation(colporteurManagementApi.cancelRotation, {
+    success: 'Rotación cancelada', invalidate: COLPORTEUR_KEYS,
+  }),
   registerSale: useAppMutation(colporteurApi.registerSale, {
     success: 'Reporte diario registrado',
     invalidate: COLPORTEUR_KEYS,
@@ -289,3 +301,9 @@ export const useLaundryActions = () => {
     publish: useAppMutation(laundryApi.publish, { success: 'Calendario de lavandería publicado', invalidate }),
   }
 }
+
+export const useColporteurReports = (from, to, enabled = true) => useQuery({
+  queryKey: ['colporteurs', 'reports', from, to],
+  queryFn: () => colporteurManagementApi.reports(from, to),
+  enabled: enabled && Boolean(from && to),
+})

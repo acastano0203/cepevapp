@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BookOpen, MapPin, Plus, Users } from 'lucide-react'
+import { BookOpen, MapPin, Plus } from 'lucide-react'
 import { PageHeader, TodayChip } from '@/components/layout/PageHeader'
 import {
   Avatar,
@@ -11,6 +11,7 @@ import {
   Dialog,
   Input,
   KpiCard,
+  LoadingState,
   Progress,
   QueryBoundary,
   SearchInput,
@@ -24,12 +25,13 @@ import {
   useColporteurProgress,
   useRotations,
   useSales,
-  useTeams,
 } from '@/hooks/useCepev'
 import { PeopleRegistry } from '@/features/people/PeopleRegistry'
-import { SEX_GROUPS } from '@/lib/constants'
 import { useAuth } from '@/lib/auth'
-import { addDays, formatDate, formatNumber, matches, percent, todayISO } from '@/lib/utils'
+import { addDays, formatNumber, matches, percent, todayISO } from '@/lib/utils'
+
+const TeamsTab = lazy(() => import('@/features/colporteurs/TeamsTab'))
+const ReportsTab = lazy(() => import('@/features/colporteurs/ReportsTab'))
 
 export default function Colporteurs() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -39,7 +41,6 @@ export default function Colporteurs() {
   const progressQuery = useColporteurProgress()
   const salesQuery = useSales(addDays(today, -6), today)
   const rotationsQuery = useRotations()
-  const teamsQuery = useTeams()
   const actions = useColporteurActions()
 
   const [tab, setTab] = useState('resultados')
@@ -93,13 +94,11 @@ export default function Colporteurs() {
   const mutations = {
     sale: actions.registerSale,
     correct: actions.correctSale,
-    rotation: actions.createRotation,
   }
 
   const titles = {
     sale: 'Registrar libros vendidos',
     correct: 'Corregir reporte diario',
-    rotation: 'Programar rotación de ciudad',
   }
 
   const handleSubmit = (event) => {
@@ -122,9 +121,11 @@ export default function Colporteurs() {
         )}
       </PageHeader>
 
-      <div role="tablist" aria-label="Secciones de colportores" className="mb-5 flex gap-1 border-b border-line">
+      <div role="tablist" aria-label="Secciones de colportores" className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
         {[
           { id: 'resultados', label: 'Resultados diarios' },
+          { id: 'equipos', label: 'Equipos y rotaciones' },
+          { id: 'reportes', label: 'Reportes' },
           { id: 'registro', label: 'Registro de colportores' },
         ].map((item) => (
           <button
@@ -145,7 +146,11 @@ export default function Colporteurs() {
         ))}
       </div>
 
-      {tab === 'registro' && <PeopleRegistry kind="Colportor" />}
+      <Suspense fallback={<LoadingState label="Cargando sección…" />}>
+        {tab === 'equipos' && <TeamsTab />}
+        {tab === 'reportes' && <ReportsTab />}
+        {tab === 'registro' && <PeopleRegistry kind="Colportor" />}
+      </Suspense>
 
       {tab === 'resultados' && (
         <>
@@ -163,24 +168,9 @@ export default function Colporteurs() {
           onChange={(event) => setSearch(event.target.value)}
           aria-label="Buscar colportor"
         />
-        {canWrite && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              onClick={() =>
-                openModal('rotation', {
-                  team_id: '',
-                  city: '',
-                  start_date: addDays(today, 7),
-                  end_date: addDays(today, 28),
-                })
-              }
-            >
-              <MapPin />
-              Programar rotación
-            </Button>
-          </div>
-        )}
+        <Button variant="secondary" onClick={() => setTab('equipos')}>
+          <MapPin /> Equipos y rotaciones
+        </Button>
       </div>
 
       {view && (
@@ -260,47 +250,6 @@ export default function Colporteurs() {
         </QueryBoundary>
       </Card>
 
-      <Card className="mt-5">
-        <CardHeader
-          title="Permanencia y rotaciones"
-          description="Los periodos terminan en la fecha de salida; el siguiente destino puede empezar ese mismo día."
-        />
-        <QueryBoundary query={rotationsQuery} empty="Sin rotaciones programadas.">
-          <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-2">
-            {(teamsQuery.data ?? []).map((team) => {
-              const teamRotations = (rotationsQuery.data ?? []).filter((item) => item.teams?.id === team.id)
-              const members = progress.filter((row) => row.team_name === team.name).length
-
-              return (
-                <div key={team.id}>
-                  <h3 className="mb-3 flex flex-wrap items-center gap-2 font-semibold">
-                    <Users className="size-4 text-navy-400" aria-hidden="true" />
-                    Equipo {team.name}
-                    <Badge className="ml-auto">{members} personas</Badge>
-                  </h3>
-                  {teamRotations.length === 0 && (
-                    <p className="text-sm text-ink-soft">Sin rotaciones registradas.</p>
-                  )}
-                  {teamRotations.map((rotation) => (
-                    <div key={rotation.id} className="flex items-center gap-3 border-t border-[#edf1f5] py-3">
-                      <MapPin className="size-4 shrink-0 text-navy-300" aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <strong className="block text-sm">{rotation.city}</strong>
-                        <small className="text-xs text-ink-soft">
-                          {formatDate(rotation.start_date)} → {formatDate(rotation.end_date)}
-                        </small>
-                      </div>
-                      <Badge tone={rotation.start_date > today ? 'gold' : 'green'}>
-                        {rotation.start_date > today ? 'Programada' : 'Vigente'}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )
-            })}
-          </div>
-        </QueryBoundary>
-      </Card>
 
       <Dialog
         open={Boolean(modal)}
@@ -341,21 +290,7 @@ export default function Colporteurs() {
             </>
           )}
 
-          {modal === 'rotation' && (
-            <>
-              <Select
-                label="Equipo"
-                required
-                value={form.team_id}
-                onChange={update('team_id')}
-                placeholder="Seleccionar…"
-                options={(teamsQuery.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
-              />
-              <Input label="Ciudad de destino" required value={form.city} onChange={update('city')} />
-              <Input label="Inicio de permanencia" type="date" required value={form.start_date} onChange={update('start_date')} />
-              <Input label="Salida de la ciudad" type="date" required value={form.end_date} onChange={update('end_date')} />
-            </>
-          )}
+
 
         </form>
       </Dialog>
