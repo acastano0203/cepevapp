@@ -465,3 +465,20 @@ export const colporteurApi = {
       }),
     ),
 }
+
+/* Laundry: machine 0 represents the manually assigned daily coordinator. */
+export const laundryApi = {
+  day: (date) => runQuery(supabase.from('v_laundry_assignments').select('*')
+    .eq('service_date', date).order('turn').order('machine')),
+  week: (date) => runQuery(supabase.from('v_laundry_assignments')
+    .select('service_date, machine, is_published').gte('service_date', date).lte('service_date', addDays(date, 6))),
+  add: ({ date, turn, machine, personId }) => runQuery(supabase.rpc('laundry_add', {
+    p_date: date, p_turn: turn, p_machine: machine, p_person: personId,
+  })),
+  remove: ({ shiftId }) => runQuery(supabase.rpc('laundry_remove', { p_shift: shiftId })),
+  coordinator: ({ date, personId }) => runQuery(supabase.rpc('laundry_set_coordinator', {
+    p_date: date, p_person: personId,
+  })),
+  autofill: ({ date }) => runQuery(supabase.rpc('laundry_autofill', { p_date: date })),
+  publish: ({ date }) => runQuery(supabase.rpc('laundry_publish', { p_date: date })),
+}

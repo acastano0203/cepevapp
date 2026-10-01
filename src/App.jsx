@@ -9,6 +9,7 @@ import Login from '@/pages/Login'
 
 // Cada módulo se carga bajo demanda: el bundle inicial se mantiene liviano.
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Laundry = lazy(() => import('@/pages/Laundry'))
 const Kitchen = lazy(() => import('@/pages/Kitchen'))
 const Fleet = lazy(() => import('@/pages/Fleet'))
 const Lodging = lazy(() => import('@/pages/Lodging'))
@@ -51,6 +52,7 @@ export default function App() {
         <Route element={<ProtectedRoutes />}>
           <Route index element={<Dashboard />} />
           <Route path="cocina" element={<Kitchen />} />
+          <Route path="lavanderia" element={<Laundry />} />
           <Route path="vehiculos" element={<Fleet />} />
           <Route path="alojamientos" element={<Lodging />} />
           <Route path="colportores" element={<Colporteurs />} />
