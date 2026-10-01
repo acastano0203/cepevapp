@@ -134,7 +134,7 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
           label="Ciudad de procedencia"
           value={value.base_city}
           onChange={update('base_city')}
-          hint={config.showTeam ? 'Si su equipo tiene rotación, esta se impone' : undefined}
+          hint={config.showTeam ? 'Lugar de origen; el destino depende del equipo y sus rotaciones' : undefined}
         />
 
         {config.showTeam && (
@@ -143,7 +143,7 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
             value={value.team_id}
             onChange={update('team_id')}
             placeholder="Sin equipo asignado"
-            options={teams.map((team) => ({ value: team.id, label: team.name }))}
+            options={teams.map((team) => ({ value: team.id, label: team.name, disabled: !team.municipality_code && team.id !== value.team_id }))}
           />
         )}
 
