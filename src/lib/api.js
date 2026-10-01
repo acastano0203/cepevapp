@@ -33,7 +33,7 @@ export const peopleApi = {
     return runQuery(query)
   },
 
-  teams: () => runQuery(supabase.from('teams').select('id, name').eq('is_active', true).order('name')),
+  teams: () => runQuery(supabase.from('v_colporteur_teams').select('*').eq('is_active', true).order('name')),
 
   /** Grilla de registro: sirve para cualquier tipo de persona. */
   registry: (kind) =>
@@ -294,7 +294,7 @@ export const colporteurApi = {
     runQuery(
       supabase
         .from('rotations')
-        .select('id, city, start_date, end_date, teams(id, name)')
+        .select('id, team_id, city, municipality_code, start_date, end_date, teams(id, name)')
         .order('start_date'),
     ),
 
@@ -342,4 +342,31 @@ export const laundryApi = {
   })),
   autofill: ({ date }) => runQuery(supabase.rpc('laundry_autofill', { p_date: date })),
   publish: ({ date }) => runQuery(supabase.rpc('laundry_publish', { p_date: date })),
+}
+
+/** Read all report pages: Supabase's default 1,000-row limit must not truncate KPIs or exports. */
+export const colporteurManagementApi = {
+  reports: async (from, to) => {
+    const rows = []
+    const size = 1000
+    for (let offset = 0; ; offset += size) {
+      const page = await runQuery(supabase.from('v_colporteur_report_rows').select('*')
+        .gte('report_date', from).lte('report_date', to)
+        .order('report_date', { ascending: false }).order('id')
+        .range(offset, offset + size - 1))
+      rows.push(...page)
+      if (page.length < size) return rows
+    }
+  },
+  saveTeam: ({ id, municipality_code }) => runQuery(supabase.rpc('colporteur_team_save', {
+    p_id: id || null, p_municipality: municipality_code,
+  })),
+  assignTeam: ({ person_id, team_id }) => runQuery(supabase.rpc('colporteur_assign_team', {
+    p_person: person_id, p_team: team_id || null,
+  })),
+  saveRotation: ({ id, team_id, municipality_code, start_date, end_date }) =>
+    runQuery(supabase.rpc('colporteur_rotation_save', {
+      p_id: id || null, p_team: team_id, p_municipality: municipality_code, p_start: start_date, p_end: end_date,
+    })),
+  cancelRotation: ({ id }) => runQuery(supabase.rpc('colporteur_rotation_cancel', { p_id: id })),
 }
