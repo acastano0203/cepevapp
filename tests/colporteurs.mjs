@@ -58,6 +58,25 @@ try {
     if (file === '10_people_documents') await db.exec('drop view if exists v_colporteurs')
     await db.exec(migration)
   }
+
+  // Simulate deployed view extensions without dropping dependent views or data.
+  const viewSnapshots = []
+  for (const name of ['v_colporteur_progress', 'v_people_registry']) {
+    const original = await scalar('select pg_get_viewdef($1::regclass, true)', ['public.' + name])
+    if (process.argv.includes('--extended-views')) {
+      await db.exec('create or replace view public.' + name
+        + " as select existing.*, 7::integer as installation_counter, 'retained'::text as installation_note from ("
+        + original.trim().replace(/;$/, '') + ') existing')
+      await rejects('create or replace view public.' + name + ' as ' + original, [], /cannot drop columns from view/)
+    }
+    const shape = (await sql(`select attname,format_type(atttypid,atttypmod) as type
+      from pg_attribute where attrelid=$1::regclass and attnum>0 and not attisdropped order by attnum`,
+    ['public.' + name])).rows
+    viewSnapshots.push({ name, shape })
+  }
+  if (process.argv.includes('--extended-views')) {
+    await db.exec('create view public.test_registry_dependency as select id,installation_counter,installation_note from public.v_people_registry')
+  }
   const legacyTeam = await scalar("insert into teams(name) values ('Equipo anterior') returning id")
   const admin = '00000000-0000-0000-0000-000000000016'
   await sql("insert into auth.users(id,email) values ($1,'colporteur-test@example.invalid')", [admin])
@@ -68,7 +87,20 @@ try {
   await sql('select sale_register($1,cepev_today()-2,3)', [person])
   const migration = await readFile(new URL('../supabase/16_colporteur_teams_reports.sql', import.meta.url), 'utf8')
   await db.exec(migration)
+  const firstDefinition = await scalar("select pg_get_viewdef('public.v_people_registry'::regclass, true)")
   await db.exec(migration)
+  check(await scalar("select pg_get_viewdef('public.v_people_registry'::regclass, true)"), firstDefinition)
+
+  for (const { name, shape } of viewSnapshots) {
+    check((await sql(`select attname,format_type(atttypid,atttypmod) as type
+      from pg_attribute where attrelid=$1::regclass and attnum>0 and not attisdropped order by attnum`,
+    ['public.' + name])).rows, shape)
+  }
+  if (process.argv.includes('--extended-views')) {
+    check(await scalar('select installation_counter from test_registry_dependency where id=$1', [person]), 7)
+    check(await scalar('select installation_note from v_colporteur_progress where person_id=$1', [person]), 'retained')
+  }
+
   checks += 1
   check(await scalar('select count(*)::int from colombia_municipalities'), 1122)
   check(await scalar('select team_name_snapshot from sales_reports where person_id=$1', [person]), 'Equipo anterior')
