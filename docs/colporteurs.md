@@ -106,3 +106,19 @@ disponibilidad local y migración repetible. No se conectan a Supabase real.
 La carga del esquema histórico en tests elimina antes la vista antigua de la migración
 10, porque esa migración existente altera el orden de sus columnas. No se modifica
 la migración histórica.
+
+## Si aparecen objetos ausentes en la cache del esquema
+
+Los errores sobre `v_colporteur_teams`, `rotations.municipality_code` o
+`v_colporteur_report_rows` indican que la API no dispone del esquema nuevo.
+
+1. Abre el **mismo proyecto Supabase** al que apunta `VITE_SUPABASE_URL`.
+2. En **SQL Editor**, ejecuta **todo** `supabase/16_colporteur_teams_reports.sql`,
+   no solo sus primeras lineas. Requiere que la migracion 15 este aplicada.
+3. La consulta final debe mostrar `true` en las tres columnas.
+4. Recarga la aplicacion.
+
+Si el editor devuelve un error, la transaccion no debe considerarse aplicada:
+resuelve ese error y ejecuta nuevamente el archivo completo. La migracion incluye
+`NOTIFY pgrst, 'reload schema'`; refrescar la cache por si solo no crea vistas
+ni columnas ausentes.
