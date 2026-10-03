@@ -14,6 +14,10 @@ update public.profiles
    set role = 'admin', full_name = 'Coordinacion CEPEV'
  where id = (select id from auth.users where email = 'tu-correo@ejemplo.com');
 
--- 3) Otros roles disponibles: 'coordinador' (escribe) | 'consulta' (solo lectura)
--- update public.profiles set role = 'coordinador'
---  where id = (select id from auth.users where email = 'cocina@ejemplo.com');
+-- 3) Roles disponibles (desde 26_roles_maintenance.sql):
+--      'admin'     -> opera toda la app
+--      'servidor'  -> solo reporta mantenimiento y ve sus reportes
+--      'capitan'   -> igual que servidor (capitanes de cuarto)
+--      'cepevista' -> solo lectura (rol por defecto de los usuarios nuevos)
+-- update public.profiles set role = 'capitan'
+--  where id = (select id from auth.users where email = 'capitan@ejemplo.com');

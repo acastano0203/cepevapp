@@ -1,15 +1,37 @@
-import { BedDouble, BookOpen, Bus, GraduationCap, House, UtensilsCrossed, WashingMachine } from 'lucide-react'
+import { BedDouble, BookOpen, Bus, GraduationCap, Hammer, House, ShieldCheck, UtensilsCrossed, WalletCards, WashingMachine } from 'lucide-react'
 
-/** Menu lateral. Agregar un modulo = agregar una entrada aqui + su ruta. */
+/**
+ * Menu lateral. Agregar un modulo = agregar una entrada aqui + su ruta.
+ * module = clave de public.role_modules: el administrador decide que perfiles lo ven.
+ */
 export const NAV_ITEMS = [
-  { to: '/', label: 'Inicio', icon: House, description: 'Una mirada a la operacion del centro' },
-  { to: '/cocina', label: 'Cocina', icon: UtensilsCrossed, description: 'Personas y turnos para cada comida' },
-  { to: '/lavanderia', label: 'Lavandería', icon: WashingMachine, description: 'Cuatro lavadoras, dos turnos y coordinación diaria' },
-  { to: '/vehiculos', label: 'Vehiculos', icon: Bus, description: 'Disponibilidad, recorridos y cuidado de la flota' },
-  { to: '/alojamientos', label: 'Alojamientos', icon: BedDouble, description: 'Cada persona, en el lugar adecuado' },
-  { to: '/colportores', label: 'Colportores', icon: BookOpen, description: 'Equipos, ciudades y resultados diarios' },
-  { to: '/cepevistas', label: 'Cepevistas', icon: GraduationCap, description: 'Fichas de los participantes del centro' },
+  { to: '/', module: 'inicio', label: 'Inicio', icon: House, description: 'Una mirada a la operacion del centro' },
+  { to: '/cocina', module: 'cocina', label: 'Cocina', icon: UtensilsCrossed, description: 'Personas y turnos para cada comida' },
+  { to: '/lavanderia', module: 'lavanderia', label: 'Lavandería', icon: WashingMachine, description: 'Cuatro lavadoras, dos turnos y coordinación diaria' },
+  { to: '/vehiculos', module: 'vehiculos', label: 'Vehiculos', icon: Bus, description: 'Disponibilidad, recorridos y cuidado de la flota' },
+  { to: '/alojamientos', module: 'alojamientos', label: 'Alojamientos', icon: BedDouble, description: 'Cada persona, en el lugar adecuado' },
+  { to: '/colportores', module: 'colportores', label: 'Colportores', icon: BookOpen, description: 'Equipos, ciudades y resultados diarios' },
+  { to: '/cepevistas', module: 'cepevistas', label: 'Cepevistas', icon: GraduationCap, description: 'Fichas de los participantes del centro' },
+  { to: '/pagos', module: 'pagos', label: 'Pagos', icon: WalletCards, description: 'Mensualidades, siembras, ofrendas y pagos en especie' },
+  { to: '/mantenimiento', module: 'mantenimiento', label: 'Mantenimiento', icon: Hammer, description: 'Daños, reparaciones y mantenimiento de todo el CEPEV' },
+  { to: '/administracion', module: 'administracion', label: 'Administración', icon: ShieldCheck, description: 'Usuarios, perfiles y accesos a los módulos' },
 ]
+
+/** Módulos que se pueden asignar a un perfil (Administración es solo del admin). */
+export const ASSIGNABLE_MODULES = NAV_ITEMS.filter((item) => item.module !== 'administracion')
+
+/** Perfiles configurables. El admin siempre ve todo. */
+export const ASSIGNABLE_ROLES = ['servidor', 'capitan', 'cepevista']
+
+/**
+ * Accesos si la base aún no tiene 27_admin_access.sql: los mismos de la
+ * migración 26 (servidor y capitán reportan; cepevista lee la operación).
+ */
+export const DEFAULT_ROLE_MODULES = {
+  servidor: ['mantenimiento'],
+  capitan: ['mantenimiento'],
+  cepevista: ASSIGNABLE_MODULES.map((item) => item.module).filter((module) => module !== 'mantenimiento'),
+}
 
 /** Etiquetas con tilde para los valores del enum (la base los guarda sin tilde). */
 export const LABELS = {
@@ -103,8 +125,97 @@ export const VEHICLE_OWNERSHIPS = [
 
 export const ROLE_LABELS = {
   admin: 'Administrador',
-  coordinador: 'Coordinación',
-  consulta: 'Consulta · Solo lectura',
+  servidor: 'Servidor',
+  capitan: 'Capitán',
+  cepevista: 'Cepevista',
 }
 
+/* ---------------------------------------------------------------------------
+ * Mantenimiento. value = lo que guarda la base (sin tilde).
+ * ------------------------------------------------------------------------ */
+export const MAINTENANCE_TYPES = [
+  { value: 'Dano', label: 'Daño' },
+  { value: 'Reparacion', label: 'Reparación' },
+  { value: 'Mantenimiento', label: 'Mantenimiento' },
+  { value: 'Limpieza', label: 'Limpieza' },
+]
+
+export const maintenanceTypeLabel = (value) => MAINTENANCE_TYPES.find((item) => item.value === value)?.label ?? value
+
+export const MAINTENANCE_STATUS_TONES = { Abierto: 'red', 'En proceso': 'gold', Resuelto: 'green' }
+
+/** Nombres de áreas con tilde para mostrar (la base las guarda sin tilde). */
+export const areaLabel = (name) => ({
+  'Banos y duchas': 'Baños y duchas',
+  Lavanderia: 'Lavandería',
+  'Otra area': 'Otra área',
+  Porteria: 'Portería',
+  'Red electrica': 'Red eléctrica',
+  'Agua y plomeria': 'Agua y plomería',
+})[name] ?? name
+
 export const HOME_CITY = 'Piedecuesta'
+
+/* ---------------------------------------------------------------------------
+ * Pagos
+ * ------------------------------------------------------------------------ */
+/**
+ * Concepto de pago. value = lo que guarda la base (sin tilde).
+ * Cepevistas: mensualidad o por días · Colportores: siembra · Ofrenda: cualquiera.
+ */
+export const PAYMENT_CONCEPTS = [
+  { value: 'Mensualidad', label: 'Mensualidad', hint: 'Cepevistas · por mes' },
+  { value: 'Por dias', label: 'Por días', hint: 'Cepevistas · estadía corta' },
+  { value: 'Siembra', label: 'Siembra', hint: 'Colportores' },
+  { value: 'Ofrenda', label: 'Ofrenda', hint: 'Voluntaria, no abona a la estadía' },
+]
+
+export const conceptLabel = (value) => PAYMENT_CONCEPTS.find((item) => item.value === value)?.label ?? value ?? '—'
+
+/** Conceptos de cuenta que admite cada tipo de persona; el primero es el de por defecto. */
+export const ACCOUNT_CONCEPTS_BY_KIND = { Cepevista: ['Mensualidad', 'Por dias'], Colportor: ['Siembra'] }
+
+/** Cuenta de pagos por defecto segun el tipo de persona. */
+export const PAYMENT_CONCEPT_BY_KIND = { Cepevista: 'Mensualidad', Colportor: 'Siembra' }
+
+/** Tipo de persona que corresponde a un concepto de cuenta. */
+export const KIND_BY_CONCEPT = { Mensualidad: 'Cepevista', 'Por dias': 'Cepevista', Siembra: 'Colportor' }
+
+/** Valor configurado para un concepto (por mes o, en «Por días», por día). */
+export function conceptDefaultFee(settings, concept) {
+  if (concept === 'Mensualidad') return Number(settings?.cepevista_monthly_fee) || 0
+  if (concept === 'Por dias') return Number(settings?.cepevista_daily_fee) || 0
+  if (concept === 'Siembra') return Number(settings?.colporteur_goal_value) || 0
+  return 0
+}
+
+/** Etiqueta del valor de la cuota según el concepto. */
+export const conceptRateLabel = (concept) =>
+  ({ Mensualidad: 'Mensualidad', 'Por dias': 'Valor por día', Siembra: 'Siembra mensual' })[concept] ?? 'Valor'
+
+/** «/ mes» o «/ día» para mostrar junto al valor de una cuenta. */
+export const conceptRateUnit = (concept) => (concept === 'Por dias' ? 'día' : 'mes')
+
+export const PAYMENT_METHODS = [
+  { value: 'Efectivo', label: 'Efectivo' },
+  { value: 'Transferencia', label: 'Transferencia' },
+  { value: 'Especie', label: 'En especie · servicio prestado' },
+]
+
+/** Estado de una cuenta -> tono del Badge. 'Al dia' se guarda sin tilde. */
+export const PAYMENT_STATUS = {
+  'En mora': { label: 'En mora', tone: 'red' },
+  'Por vencer': { label: 'Por vencer', tone: 'gold' },
+  Pendiente: { label: 'Pendiente', tone: 'navy' },
+  'Al dia': { label: 'Al día', tone: 'green' },
+  Cerrada: { label: 'Cerrada', tone: 'neutral' },
+  'Sin cuenta': { label: 'Sin cuenta', tone: 'neutral' },
+}
+
+/** Estado de una cuota -> tono del Badge. */
+export const CHARGE_STATUS_TONES = {
+  Pagada: 'green',
+  Pendiente: 'navy',
+  'Por vencer': 'gold',
+  Vencida: 'red',
+}

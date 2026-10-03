@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { BedDouble, Pencil, Plus, Power, Trash2, TriangleAlert } from 'lucide-react'
+import { BedDouble, FileSpreadsheet, FileText, Pencil, Plus, Power, Trash2, TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Avatar,
   Badge,
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui'
 import {
   useDeletePerson,
+  usePaymentActions,
   usePeopleRegistry,
   useSavePerson,
   useSetAvailability,
@@ -24,6 +26,7 @@ import { PERSON_CLASSIFICATIONS } from '@/lib/constants'
 import { cn, formatDate, formatNumber, matches } from '@/lib/utils'
 import { PersonForm, emptyPerson, toFormValues } from './PersonForm'
 import { getRegistryConfig } from './registryConfig'
+import { downloadFile, openPrintView, registryCsv, registryPrintHtml } from './registryExport'
 
 /** Celda con el dato propio de cada tipo: resultados o alojamiento. */
 function SpecificCell({ row, config }) {
@@ -261,6 +264,7 @@ export function PeopleRegistry({ kind }) {
   const registry = usePeopleRegistry(kind)
   const teamsQuery = useTeams()
   const savePerson = useSavePerson()
+  const paymentActions = usePaymentActions()
   const deletePerson = useDeletePerson()
   const setAvailability = useSetAvailability()
 
@@ -316,7 +320,14 @@ export function PeopleRegistry({ kind }) {
   }
 
   const cancel = () => setForm(null)
-  const submit = (values) => savePerson.mutate({ ...values, kind }, { onSuccess: cancel })
+  /** Ficha nueva: primero la persona, luego su cuenta de pagos (y el primer pago, si se indicó). */
+  const submit = ({ payment, ...values }) =>
+    savePerson.mutate({ ...values, kind }, {
+      onSuccess: (saved) => {
+        if (!values.id && payment && saved?.id) paymentActions.enroll.mutate({ ...payment, person_id: saved.id })
+        cancel()
+      },
+    })
   const confirmDelete = (force = false) =>
     deletePerson.mutate({ id: toDelete.id, force }, { onSuccess: () => setToDelete(null) })
 
@@ -327,7 +338,7 @@ export function PeopleRegistry({ kind }) {
       onSubmit={submit}
       onCancel={cancel}
       teams={teamsQuery.data ?? []}
-      saving={savePerson.isPending}
+      saving={savePerson.isPending || paymentActions.enroll.isPending}
       config={config}
     />
   )
@@ -386,6 +397,27 @@ export function PeopleRegistry({ kind }) {
             Nuevo {config.singular}
           </Button>
         )}
+        <div className="flex gap-2 sm:ml-auto">
+          <Button variant="secondary" disabled={!registry.isSuccess || visible.length === 0}
+            title="Descarga las fichas visibles en un archivo que abre Excel"
+            onClick={() => downloadFile(registryCsv(visible, config), 'text/csv;charset=utf-8',
+              `${config.plural}_${new Date().toISOString().slice(0, 10)}.csv`)}>
+            <FileSpreadsheet /> Excel
+          </Button>
+          <Button variant="secondary" disabled={!registry.isSuccess || visible.length === 0}
+            title="Abre la vista para imprimir o guardar como PDF"
+            onClick={() => {
+              const criteria = [
+                status === 'activos' ? 'Solo activos' : status === 'inactivos' ? 'Solo inactivos' : 'Todos los estados',
+                search && `Búsqueda: «${search}»`,
+              ].filter(Boolean).join(' · ')
+              if (!openPrintView(registryPrintHtml(visible, config, criteria))) {
+                toast.error('Permite las ventanas emergentes para imprimir o guardar el PDF.')
+              }
+            }}>
+            <FileText /> PDF
+          </Button>
+        </div>
       </div>
 
       {/* Alta: el formulario aparece arriba de la grilla */}

@@ -23,6 +23,8 @@ export const REGISTRY_CONFIG = {
     showBed: false,
     showLicense: false,
     defaultGoal: 10,
+    // Al registrar la ficha se abre su cuenta de pagos con este concepto
+    paymentConcept: 'Siembra',
     goalLabel: 'Meta diaria (libros)',
     metrics: {
       totalLabel: 'Colportores registrados',
@@ -40,11 +42,12 @@ export const REGISTRY_CONFIG = {
     icon: GraduationCap,
     showTeam: false,
     showGoal: false,
-    showClassification: false,
+    showClassification: true,
     showResults: false,
     showBed: true,
     showLicense: true,
     defaultGoal: 0,
+    paymentConcept: 'Mensualidad',
     metrics: {
       totalLabel: 'Cepevistas registrados',
       extraLabel: 'Con alojamiento',

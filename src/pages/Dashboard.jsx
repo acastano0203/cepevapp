@@ -5,8 +5,10 @@ import {
   BookOpen,
   Bus,
   CircleCheck,
+  Hammer,
   ClipboardList,
   UtensilsCrossed,
+  WalletCards,
   Wrench,
 } from 'lucide-react'
 import { PageHeader, TodayChip } from '@/components/layout/PageHeader'
@@ -20,7 +22,8 @@ import {
   QueryBoundary,
   Skeleton,
 } from '@/components/ui'
-import { useAudit, useDashboard, useRoomIssues } from '@/hooks/useCepev'
+import { OperationsBoard } from '@/features/dashboard/OperationsBoard'
+import { useAudit, useDashboard, useMaintenanceReports, usePaymentAccounts, useRoomIssues } from '@/hooks/useCepev'
 import { cn, formatNumber, percent, relativeTime } from '@/lib/utils'
 
 /** Color del contador según la gravedad del pendiente. */
@@ -64,6 +67,8 @@ export default function Dashboard() {
   const dashboard = useDashboard()
   const audit = useAudit(6)
   const issues = useRoomIssues()
+  const maintenance = useMaintenanceReports()
+  const paymentAccounts = usePaymentAccounts()
   const data = dashboard.data
 
   if (dashboard.isPending) {
@@ -80,13 +85,20 @@ export default function Dashboard() {
     )
   }
 
-  const occupancy = percent(data?.beds_occupied, data?.beds_total)
   const kitchenPeople = data?.kitchen_filled_today ?? 0
   const mealsMissing = data?.kitchen_meals_missing_today ?? 0
   const salesPercent = percent(data?.books_last_7d, data?.books_goal_7d)
 
   const openIssues = (issues.data ?? []).filter((issue) => issue.status === 'Abierta')
   const urgentIssues = openIssues.filter((issue) => issue.priority === 'Urgente').length
+
+  const pendingRepairs = (maintenance.data ?? []).filter((report) => report.status !== 'Resuelto')
+  const urgentRepairs = pendingRepairs.filter((report) => report.priority === 'Urgente').length
+  const unattendedRepairs = pendingRepairs.filter((report) => report.status === 'Abierto').length
+
+  const accounts = paymentAccounts.data ?? []
+  const overdueAccounts = accounts.filter((account) => account.status === 'En mora').length
+  const dueSoonAccounts = accounts.filter((account) => account.status === 'Por vencer').length
 
   /**
    * Pendientes del día. Los que están en cero no son prioridad: se agrupan
@@ -112,6 +124,17 @@ export default function Dashboard() {
       detail: 'Consulta disponibilidad y registra la reserva',
       done: 'llegadas',
       to: '/alojamientos?vista=llegadas',
+    },
+    {
+      key: 'reportes-mantenimiento',
+      icon: Hammer,
+      count: pendingRepairs.length,
+      severity: urgentRepairs > 0 ? 'high' : 'medium',
+      title: pendingRepairs.length === 1 ? 'Reporte de mantenimiento pendiente' : 'Reportes de mantenimiento pendientes',
+      detail: [urgentRepairs && `${urgentRepairs} urgente${urgentRepairs === 1 ? '' : 's'}`,
+        unattendedRepairs && `${unattendedRepairs} sin atender`].filter(Boolean).join(' · ') || 'En proceso de reparación',
+      done: 'mantenimiento',
+      to: urgentRepairs > 0 ? '/mantenimiento?vista=urgentes' : '/mantenimiento',
     },
     {
       key: 'novedades',
@@ -152,6 +175,26 @@ export default function Dashboard() {
       detail: 'Un reporte pendiente no es lo mismo que cero ventas',
       done: 'reportes',
       to: '/colportores?vista=faltantes',
+    },
+    {
+      key: 'mora',
+      icon: WalletCards,
+      count: overdueAccounts,
+      severity: 'high',
+      title: overdueAccounts === 1 ? 'Cuenta en mora' : 'Cuentas en mora',
+      detail: 'Cepevistas o colportores con una cuota vencida: nadie debe pasar un mes debiendo',
+      done: 'pagos',
+      to: '/pagos?vista=mora',
+    },
+    {
+      key: 'por-vencer',
+      icon: WalletCards,
+      count: dueSoonAccounts,
+      severity: 'medium',
+      title: dueSoonAccounts === 1 ? 'Cuota por vencer' : 'Cuotas por vencer',
+      detail: 'Vencen según la fecha de ingreso de cada persona',
+      done: 'cuotas',
+      to: '/pagos?vista=por-vencer',
     },
   ]
   const pending = attention
@@ -269,35 +312,6 @@ export default function Dashboard() {
 
         <div className="flex min-w-0 flex-col gap-5">
           <Card>
-            <CardHeader
-              title="Ocupación de la sede"
-              description="Camas ocupadas sobre la capacidad física"
-            />
-            <CardBody>
-              <div className="flex items-center gap-5">
-                <strong className="text-4xl leading-none font-semibold tracking-tighter text-navy-700">
-                  {occupancy}
-                  <span className="text-xl">%</span>
-                </strong>
-                <div>
-                  <Badge tone={occupancy > 92 ? 'gold' : 'green'}>
-                    {occupancy > 92 ? 'Capacidad ajustada' : 'Capacidad disponible'}
-                  </Badge>
-                  <p className="mt-2 text-[13px] text-ink-soft">
-                    {formatNumber(data?.beds_occupied ?? 0)} ocupadas ·{' '}
-                    {formatNumber(data?.beds_free ?? 0)} libres
-                  </p>
-                </div>
-              </div>
-              <Progress value={occupancy} className="mt-4 h-3" />
-              <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-ink-soft">
-                <span>Capacidad: {formatNumber(data?.beds_total ?? 0)} camas</span>
-                <span>{formatNumber(data?.beds_blocked ?? 0)} bloqueadas</span>
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
             <CardHeader title="Últimos movimientos" description="Bitácora del centro" />
             <QueryBoundary query={audit} empty="Todavía no hay movimientos registrados.">
               <ul>
@@ -320,6 +334,8 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      <OperationsBoard />
     </>
   )
 }

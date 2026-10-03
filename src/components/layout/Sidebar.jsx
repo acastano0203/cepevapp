@@ -15,13 +15,15 @@ function Logo() {
 }
 
 function NavList({ onNavigate }) {
+  const { hasModule } = useAuth()
+  const items = NAV_ITEMS.filter((item) => hasModule(item.module))
   return (
     <nav aria-label="Módulos" className="px-3">
       <p className="px-3 pt-3 pb-2 text-[11px] font-semibold tracking-[0.13em] text-navy-200">
         OPERACIÓN
       </p>
       <ul className="flex flex-col gap-1">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <li key={to}>
             <NavLink
               to={to}

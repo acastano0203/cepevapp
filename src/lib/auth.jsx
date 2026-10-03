@@ -1,16 +1,32 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase, toFriendlyError } from './supabase'
+import { DEFAULT_ROLE_MODULES, NAV_ITEMS } from './constants'
+
+const ALL_MODULES = NAV_ITEMS.map((item) => item.module)
+
+/** Módulos del usuario. Si la base no tiene la migración 27, usa los accesos por defecto. */
+async function loadModules(role) {
+  if (role === 'admin') return ALL_MODULES
+  const { data, error } = await supabase.rpc('my_modules')
+  if (error) {
+    console.warn('[CEPEV] Accesos por perfil no disponibles; se usan los de por defecto:', error.message)
+    return DEFAULT_ROLE_MODULES[role] ?? []
+  }
+  return data ?? []
+}
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
 
   const loadProfile = useCallback(async (userId) => {
     if (!userId) {
       setProfile(null)
+      setModules([])
       return
     }
     const { data, error } = await supabase
@@ -21,10 +37,13 @@ export function AuthProvider({ children }) {
 
     if (error) {
       console.error('[CEPEV] No se pudo leer el perfil:', error.message)
-      setProfile({ id: userId, full_name: 'Usuario CEPEV', role: 'consulta' })
+      setProfile({ id: userId, full_name: 'Usuario CEPEV', role: 'cepevista' })
+      setModules(await loadModules('cepevista'))
       return
     }
-    setProfile(data ?? { id: userId, full_name: 'Usuario CEPEV', role: 'consulta' })
+    const next = data ?? { id: userId, full_name: 'Usuario CEPEV', role: 'cepevista' }
+    setModules(await loadModules(next.role))
+    setProfile(next)
   }, [])
 
   useEffect(() => {
@@ -55,35 +74,37 @@ export function AuthProvider({ children }) {
     if (error) throw new Error(toFriendlyError(error))
   }, [])
 
-  const signUp = useCallback(async (email, password, fullName) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    })
-    if (error) throw new Error(toFriendlyError(error))
-  }, [])
-
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     setProfile(null)
+    setModules([])
   }, [])
 
   const value = useMemo(() => {
-    const role = profile?.role ?? 'consulta'
+    const role = profile?.role ?? 'cepevista'
+    const isAdmin = role === 'admin'
+    /** Lo que el administrador marcó para este perfil (el admin ve todo). */
+    const hasModule = (module) => isAdmin || modules.includes(module)
+    const canReport = hasModule('mantenimiento')
+    const canRead = isAdmin || modules.some((module) => module !== 'mantenimiento' && module !== 'administracion')
     return {
       session,
       user: session?.user ?? null,
       profile,
       role,
-      canWrite: role === 'admin' || role === 'coordinador',
-      isAdmin: role === 'admin',
+      modules,
+      hasModule,
+      canWrite: isAdmin,
+      isAdmin,
+      canRead,
+      canReport,
+      /** Reporta mantenimiento pero no lo gestiona: ve la vista sencilla del módulo. */
+      reporterOnly: !isAdmin && canReport,
       loading,
       signIn,
-      signUp,
       signOut,
     }
-  }, [session, profile, loading, signIn, signUp, signOut])
+  }, [session, profile, modules, loading, signIn, signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

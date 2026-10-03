@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { LogIn, TriangleAlert } from 'lucide-react'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 import { Button, Input } from '@/components/ui'
@@ -7,9 +6,8 @@ import { useAuth } from '@/lib/auth'
 import { isSupabaseConfigured } from '@/lib/supabase'
 
 export default function Login() {
-  const { signIn, signUp } = useAuth()
-  const [mode, setMode] = useState('signin')
-  const [form, setForm] = useState({ email: '', password: '', fullName: '' })
+  const { signIn } = useAuth()
+  const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -20,13 +18,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      if (mode === 'signin') {
-        await signIn(form.email.trim(), form.password)
-      } else {
-        await signUp(form.email.trim(), form.password, form.fullName.trim())
-        toast.success('Cuenta creada. Revisa tu correo si se solicita confirmación.')
-        setMode('signin')
-      }
+      await signIn(form.email.trim(), form.password)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -65,7 +57,7 @@ export default function Login() {
 
           <div className="surface px-6 py-7 shadow-sm sm:px-8 sm:py-8">
             <h2 className="text-xl font-bold tracking-tight text-ink">
-              {mode === 'signin' ? 'Ingresar' : 'Crear cuenta'}
+              Ingresar
             </h2>
 
             {!isSupabaseConfigured && (
@@ -76,15 +68,6 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-              {mode === 'signup' && (
-                <Input
-                  label="Nombre completo"
-                  value={form.fullName}
-                  onChange={update('fullName')}
-                  autoComplete="name"
-                  required
-                />
-              )}
               <Input
                 label="Correo"
                 type="email"
@@ -98,7 +81,7 @@ export default function Login() {
                 type="password"
                 value={form.password}
                 onChange={update('password')}
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                autoComplete="current-password"
                 minLength={6}
                 required
               />
@@ -112,23 +95,13 @@ export default function Login() {
 
               <Button type="submit" size="lg" loading={loading} className="mt-1 w-full">
                 <LogIn />
-                {mode === 'signin' ? 'Ingresar' : 'Registrarme'}
+                Ingresar
               </Button>
             </form>
 
-            <div className="mt-6 border-t border-line pt-5 text-center text-sm text-ink-soft">
-              {mode === 'signin' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}{' '}
-              <button
-                type="button"
-                className="font-semibold text-navy-600 underline underline-offset-4"
-                onClick={() => {
-                  setMode(mode === 'signin' ? 'signup' : 'signin')
-                  setError('')
-                }}
-              >
-                {mode === 'signin' ? 'Crear una' : 'Ingresar'}
-              </button>
-            </div>
+            <p className="mt-6 border-t border-line pt-5 text-center text-sm text-ink-soft">
+              ¿No tienes cuenta? Pídela al administrador del CEPEV.
+            </p>
           </div>
         </div>
       </div>

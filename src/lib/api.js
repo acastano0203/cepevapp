@@ -15,6 +15,29 @@ export const dashboardApi = {
         .order('occurred_at', { ascending: false })
         .limit(limit),
     ),
+
+  /** Equipos en campo hoy o que salen en los próximos `days` días. La salida no se incluye. */
+  fieldRotations: (days = 30) =>
+    runQuery(
+      supabase
+        .from('rotations')
+        .select('id, team_id, city, start_date, end_date, teams(id, name), colombia_municipalities(name, department)')
+        .gt('end_date', todayISO())
+        .lte('start_date', addDays(todayISO(), days))
+        .order('start_date'),
+    ),
+
+  /** Recorridos reservados o en ruta que aún no terminan. */
+  activeTrips: (limit = 8) =>
+    runQuery(
+      supabase
+        .from('trips')
+        .select('id, destination_city, starts_at, ends_at, status, vehicles(id, name, plate), people(id, full_name)')
+        .in('status', ['Reservado', 'En ruta'])
+        .gte('ends_at', new Date().toISOString())
+        .order('starts_at')
+        .limit(limit),
+    ),
 }
 
 /* ===========================================================================
@@ -508,4 +531,236 @@ export const colporteurManagementApi = {
       p_id: id || null, p_team: team_id, p_municipality: municipality_code, p_start: start_date, p_end: end_date,
     })),
   cancelRotation: ({ id }) => runQuery(supabase.rpc('colporteur_rotation_cancel', { p_id: id })),
+}
+
+/* ===========================================================================
+ * Administración (solo admin)
+ * ======================================================================== */
+/**
+ * Crear, editar y eliminar usuarios pasa por la Edge Function admin-users:
+ * necesita la llave de servicio, que nunca debe estar en el navegador.
+ */
+async function invokeAdminUsers(body) {
+  const { data, error } = await supabase.functions.invoke('admin-users', { body })
+  if (!error) return data
+  let message = error.message
+  try {
+    const payload = await error.context?.json()
+    if (payload?.error) message = payload.error
+  } catch {
+    // La respuesta no traía JSON: se conserva el mensaje original
+  }
+  if (error.context?.status === 404 || /Failed to send a request/i.test(message)) {
+    message = 'La función admin-users no está desplegada en Supabase. Despliégala con ' +
+      '«supabase functions deploy admin-users» (ver docs/maintenance.md) y vuelve a intentarlo.'
+  }
+  throw new Error(message)
+}
+
+export const adminApi = {
+  roleModules: () => runQuery(supabase.from('role_modules').select('role, module')),
+  setRoleModules: ({ role, modules }) =>
+    runQuery(supabase.rpc('admin_set_role_modules', { p_role: role, p_modules: modules })),
+  users: () => runQuery(supabase.rpc('admin_users')),
+  createUser: ({ full_name, email, password, role }) =>
+    invokeAdminUsers({ action: 'create', full_name, email, password, role }),
+  /**
+   * Nombre y perfil se guardan en la base de datos. Solo el correo y la
+   * contraseña (que viven en Supabase Auth) necesitan la Edge Function.
+   */
+  updateUser: ({ id, full_name, email, original_email, password, role }) => {
+    const emailChanged = email.trim().toLowerCase() !== String(original_email ?? '').toLowerCase()
+    if (!password && !emailChanged) {
+      return runQuery(supabase.rpc('admin_update_profile', { p_user: id, p_full_name: full_name, p_role: role }))
+    }
+    return invokeAdminUsers({ action: 'update', id, full_name, email, password: password || undefined, role })
+  },
+  deleteUser: ({ id }) => invokeAdminUsers({ action: 'delete', id }),
+}
+
+/* ===========================================================================
+ * Mantenimiento
+ * ======================================================================== */
+const MAINTENANCE_BUCKET = 'maintenance-photos'
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+export const maintenanceApi = {
+  areas: () => runQuery(supabase.from('maintenance_areas').select('*').order('sort_order').order('name')),
+
+  rooms: () => runQuery(supabase.rpc('maintenance_rooms')),
+
+  /** La RLS decide: la operación ve todo; servidor y capitán, solo lo suyo. */
+  reports: () =>
+    runQuery(supabase.from('v_maintenance_reports').select('*').order('created_at', { ascending: false }).limit(500)),
+
+  /** Sube la foto (opcional) a la carpeta del usuario y luego crea el reporte. */
+  create: async ({ area_id, room_id, location_detail, report_type, priority, detail, photo, userId }) => {
+    let path = null
+    if (photo) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(photo.type)) {
+        throw new Error('La foto debe ser JPG, PNG o WEBP.')
+      }
+      if (photo.size > MAX_PHOTO_BYTES) throw new Error('La foto no puede superar 5 MB.')
+      const extension = photo.type === 'image/png' ? 'png' : photo.type === 'image/webp' ? 'webp' : 'jpg'
+      path = `${userId}/${crypto.randomUUID()}.${extension}`
+      await runQuery(supabase.storage.from(MAINTENANCE_BUCKET).upload(path, photo, { contentType: photo.type }))
+    }
+    try {
+      return await runQuery(supabase.rpc('maintenance_report_create', {
+        p_area: area_id,
+        p_type: report_type,
+        p_priority: priority,
+        p_detail: detail,
+        p_room: room_id || null,
+        p_location: location_detail || null,
+        p_photo_path: path,
+      }))
+    } catch (error) {
+      if (path) await supabase.storage.from(MAINTENANCE_BUCKET).remove([path])
+      throw error
+    }
+  },
+
+  update: ({ id, status, assigned_to, resolution, cost_cop, priority }) =>
+    runQuery(supabase.rpc('maintenance_report_update', {
+      p_id: id,
+      p_status: status,
+      p_assigned_to: assigned_to || null,
+      p_resolution: resolution || null,
+      p_cost: cost_cop === '' || cost_cop == null ? null : Number(cost_cop),
+      p_priority: priority || null,
+    })),
+
+  saveArea: ({ id, name, is_active }) =>
+    runQuery(supabase.rpc('maintenance_area_save', { p_id: id || null, p_name: name, p_active: is_active ?? true })),
+
+  /** Enlace temporal (10 minutos) para ver la foto privada de un reporte. */
+  photoUrl: async (path) => {
+    const data = await runQuery(supabase.storage.from(MAINTENANCE_BUCKET).createSignedUrl(path, 600))
+    return data.signedUrl
+  },
+}
+
+/* ===========================================================================
+ * Pagos
+ * ======================================================================== */
+/** Lee todas las paginas: el limite de 1.000 filas no debe truncar totales. */
+async function allRows(build) {
+  const rows = []
+  const size = 1000
+  for (let offset = 0; ; offset += size) {
+    const page = await runQuery(build().range(offset, offset + size - 1))
+    rows.push(...page)
+    if (page.length < size) return rows
+  }
+}
+
+export const paymentsApi = {
+  settings: () => runQuery(supabase.from('payment_settings').select('*').maybeSingle()),
+
+  serviceTypes: () => runQuery(supabase.from('payment_service_types').select('*').order('name')),
+
+  /** Genera las cuotas de los ciclos ya iniciados antes de leer el estado de cuentas. */
+  accounts: async () => {
+    await runQuery(supabase.rpc('payment_sync_charges', { p_account: null }))
+    return allRows(() => supabase.from('v_payment_accounts').select('*').order('person_name').order('id'))
+  },
+
+  charges: (accountId) =>
+    runQuery(supabase.from('v_payment_charges').select('*').eq('account_id', accountId).order('period_index')),
+
+  payments: (from, to) =>
+    allRows(() => supabase.from('v_payments').select('*')
+      .gte('paid_on', from).lte('paid_on', to)
+      .order('paid_on', { ascending: false }).order('created_at', { ascending: false }).order('id')),
+
+  accountPayments: (accountId) =>
+    runQuery(supabase.from('v_payments').select('*').eq('account_id', accountId)
+      .order('paid_on', { ascending: false }).order('created_at', { ascending: false })),
+
+  saveSettings: ({ cepevista_monthly_fee, cepevista_daily_fee, colporteur_goal_value, alert_days_before, apply_to_accounts }) =>
+    runQuery(supabase.rpc('payment_settings_save', {
+      p_cepevista_fee: Number(cepevista_monthly_fee),
+      p_colporteur_goal_value: Number(colporteur_goal_value),
+      p_alert_days: Number(alert_days_before),
+      p_apply_to_accounts: Boolean(apply_to_accounts),
+      p_cepevista_daily_fee: Number(cepevista_daily_fee),
+    })),
+
+  saveServiceType: ({ id, name, hourly_rate, is_active }) =>
+    runQuery(supabase.rpc('payment_service_type_save', {
+      p_id: id || null, p_name: name, p_hourly_rate: Number(hourly_rate), p_active: is_active ?? true,
+    })),
+
+  saveAccount: ({ id, person_id, entry_date, monthly_amount, closed_on, notes, concept }) =>
+    runQuery(supabase.rpc('payment_account_save', {
+      p_id: id || null,
+      p_person: person_id,
+      p_entry_date: entry_date,
+      p_monthly_amount: monthly_amount === '' || monthly_amount == null ? null : Number(monthly_amount),
+      p_closed_on: closed_on || null,
+      p_notes: notes || null,
+      p_concept: concept || null,
+    })),
+
+  /** Cepevistas y colportores sin cuenta, con la fecha de ingreso sugerida. */
+  missingAccounts: () =>
+    runQuery(supabase.from('v_payment_missing_accounts').select('*').order('person_name')),
+
+  /** items: [{ person_id, entry_date, monthly_amount, concept, closed_on }] · todas o ninguna. */
+  openAccounts: (items) =>
+    runQuery(supabase.rpc('payment_accounts_open', {
+      p_items: items.map((item) => ({
+        person_id: item.person_id,
+        entry_date: item.entry_date,
+        monthly_amount: item.monthly_amount === '' || item.monthly_amount == null ? null : Number(item.monthly_amount),
+        concept: item.concept || null,
+        closed_on: item.concept === 'Por dias' ? item.closed_on || null : null,
+      })),
+    })),
+
+  adjustCharge: ({ id, amount, reason }) =>
+    runQuery(supabase.rpc('payment_charge_adjust', { p_charge: id, p_amount: Number(amount), p_reason: reason })),
+
+  register: (payload) =>
+    runQuery(supabase.rpc('payment_register', {
+      p_person: payload.person_id || null,
+      p_concept: payload.concept,
+      p_method: payload.method,
+      p_amount: payload.method === 'Especie' ? null : Number(payload.amount),
+      p_paid_on: payload.paid_on,
+      p_service_type: payload.method === 'Especie' ? payload.service_type_id || null : null,
+      p_hours: payload.method === 'Especie' ? Number(payload.service_hours) : null,
+      p_reference: payload.reference || null,
+      p_notes: payload.notes || null,
+      p_payer_name: payload.payer_name || null,
+    })),
+
+  /**
+   * Alta desde la ficha: abre la cuenta y, si se pide, registra el primer pago.
+   * Cepevista: mensualidad o por días (con fecha de salida) · Colportor: siembra.
+   */
+  enroll: async ({ person_id, concept, closed_on, entry_date, monthly_amount, pay_now, method, amount, paid_on, service_type_id, service_hours, reference }) => {
+    try {
+      return await runQuery(supabase.rpc('payment_enroll', {
+        p_person: person_id,
+        p_entry_date: entry_date,
+        p_monthly_amount: monthly_amount === '' || monthly_amount == null ? null : Number(monthly_amount),
+        p_payment: pay_now ? {
+          method,
+          amount: method === 'Especie' || amount === '' || amount == null ? null : Number(amount),
+          paid_on: paid_on || null,
+          service_type_id: method === 'Especie' ? service_type_id || null : null,
+          service_hours: method === 'Especie' ? Number(service_hours) : null,
+          reference: method === 'Transferencia' ? reference || null : null,
+        } : null,
+        p_concept: concept || null,
+        p_closed_on: concept === 'Por dias' ? closed_on || null : null,
+      }))
+    } catch (error) {
+      throw new Error(`La ficha quedó registrada, pero no se abrió la cuenta de pagos: ${error.message} Ábrela desde Pagos.`)
+    }
+  },
+
+  void: ({ id, reason }) => runQuery(supabase.rpc('payment_void', { p_id: id, p_reason: reason })),
 }

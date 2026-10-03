@@ -56,6 +56,24 @@ export function toFriendlyError(error) {
       'resultados sean true y vuelve a cargar la pagina. El archivo tambien actualiza la cache del esquema.'
   }
 
+  if (['PGRST205', 'PGRST202'].includes(error.code)
+    && /\b(?:v_payment_\w+|v_payments|payment_\w+)\b/.test(message)) {
+    return 'El módulo de pagos no está disponible en la API. Ejecuta el archivo completo ' +
+      'supabase/25_payments.sql en el SQL Editor del proyecto Supabase configurado y vuelve a cargar la página.'
+  }
+
+  if (['PGRST205', 'PGRST202'].includes(error.code)
+    && /\b(?:v_maintenance_reports|maintenance_\w+)\b/.test(message)) {
+    return 'El módulo de mantenimiento no está disponible en la API. Ejecuta el archivo completo ' +
+      'supabase/26_roles_maintenance.sql en el SQL Editor del proyecto Supabase configurado y vuelve a cargar la página.'
+  }
+
+  if (['PGRST205', 'PGRST202'].includes(error.code)
+    && /\b(?:role_modules|admin_\w+|my_modules)\b/.test(message)) {
+    return 'El módulo de administración no está disponible en la API. Ejecuta el archivo completo ' +
+      'supabase/27_admin_access.sql en el SQL Editor del proyecto Supabase configurado y vuelve a cargar la página.'
+  }
+
   if (error.code === 'P0001' || message.includes('P0001')) {
     return message.replace(/^.*?P0001[:\s]*/i, '')
   }

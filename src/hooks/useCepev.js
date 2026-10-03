@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { colporteurManagementApi, colporteurApi, dashboardApi, fleetApi, kitchenApi, laundryApi, lodgingApi, peopleApi } from '@/lib/api'
+import { adminApi, colporteurManagementApi, colporteurApi, dashboardApi, fleetApi, kitchenApi, laundryApi, lodgingApi, maintenanceApi, paymentsApi, peopleApi } from '@/lib/api'
 import { addDays, todayISO } from '@/lib/utils'
 
 /** Claves de cache centralizadas: evita invalidaciones dispersas. */
@@ -52,6 +52,12 @@ function useAppMutation(mutationFn, { success, invalidate = [], onDone } = {}) {
 export const useDashboard = () =>
   useQuery({ queryKey: qk.dashboard, queryFn: dashboardApi.counters })
 
+export const useFieldRotations = () =>
+  useQuery({ queryKey: ['colporteurs', 'field-rotations'], queryFn: () => dashboardApi.fieldRotations() })
+
+export const useActiveTrips = () =>
+  useQuery({ queryKey: ['fleet', 'active-trips'], queryFn: () => dashboardApi.activeTrips() })
+
 export const useAudit = (limit = 8) =>
   useQuery({ queryKey: qk.audit, queryFn: () => dashboardApi.audit(limit) })
 
@@ -63,7 +69,7 @@ export const usePeople = (filters) =>
 
 export const useTeams = () => useQuery({ queryKey: qk.teams, queryFn: peopleApi.teams })
 
-const PEOPLE_KEYS = [['laundry'], ['kitchen'], ['people'], ['colporteurs'], qk.progress, qk.arrivals]
+const PEOPLE_KEYS = [['laundry'], ['kitchen'], ['people'], ['colporteurs'], ['payments'], qk.progress, qk.arrivals]
 
 export const useSavePerson = () =>
   useAppMutation(peopleApi.upsert, {
@@ -202,7 +208,7 @@ export const useFuelLogs = () => useQuery({ queryKey: qk.fuel, queryFn: () => fl
 export const useMaintenanceLogs = () =>
   useQuery({ queryKey: qk.maintenance, queryFn: () => fleetApi.maintenance() })
 
-const FLEET_KEYS = [['laundry'], qk.vehicles, qk.trips, qk.fuel, qk.maintenance]
+const FLEET_KEYS = [['laundry'], qk.vehicles, qk.trips, qk.fuel, qk.maintenance, ['fleet', 'active-trips']]
 
 export const useFleetActions = () => ({
   saveVehicle: useAppMutation(fleetApi.saveVehicle, {
@@ -306,4 +312,101 @@ export const useColporteurReports = (from, to, enabled = true) => useQuery({
   queryKey: ['colporteurs', 'reports', from, to],
   queryFn: () => colporteurManagementApi.reports(from, to),
   enabled: enabled && Boolean(from && to),
+})
+
+/* ===========================================================================
+ * Administración
+ * ======================================================================== */
+export const useRoleModules = () => useQuery({ queryKey: ['admin', 'role-modules'], queryFn: adminApi.roleModules })
+export const useAdminUsers = () => useQuery({ queryKey: ['admin', 'users'], queryFn: adminApi.users })
+
+export const useAdminActions = () => ({
+  setRoleModules: useAppMutation(adminApi.setRoleModules, {
+    success: 'Accesos guardados. Se aplican cuando cada usuario vuelva a ingresar o recargue la página.',
+    invalidate: [['admin']],
+  }),
+  createUser: useAppMutation(adminApi.createUser, { success: 'Usuario creado', invalidate: [['admin']] }),
+  updateUser: useAppMutation(adminApi.updateUser, { success: 'Usuario actualizado', invalidate: [['admin']] }),
+  deleteUser: useAppMutation(adminApi.deleteUser, { success: 'Usuario eliminado', invalidate: [['admin']] }),
+})
+
+/* ===========================================================================
+ * Mantenimiento
+ * ======================================================================== */
+const MAINTENANCE_KEYS = [['maintenance']]
+
+export const useMaintenanceAreas = () =>
+  useQuery({ queryKey: ['maintenance', 'areas'], queryFn: maintenanceApi.areas })
+
+export const useMaintenanceRooms = () =>
+  useQuery({ queryKey: ['maintenance', 'rooms'], queryFn: maintenanceApi.rooms })
+
+export const useMaintenanceReports = (enabled = true) =>
+  useQuery({ queryKey: ['maintenance', 'reports'], queryFn: maintenanceApi.reports, enabled })
+
+export const useMaintenancePhoto = (path) =>
+  useQuery({
+    queryKey: ['maintenance', 'photo', path],
+    queryFn: () => maintenanceApi.photoUrl(path),
+    enabled: Boolean(path),
+    staleTime: 5 * 60 * 1000,
+  })
+
+export const useMaintenanceActions = () => ({
+  create: useAppMutation(maintenanceApi.create, { success: 'Reporte enviado', invalidate: MAINTENANCE_KEYS }),
+  update: useAppMutation(maintenanceApi.update, {
+    success: (_data, variables) => (variables.status === 'Resuelto' ? 'Reporte resuelto' : 'Reporte actualizado'),
+    invalidate: MAINTENANCE_KEYS,
+  }),
+  saveArea: useAppMutation(maintenanceApi.saveArea, { success: 'Área guardada', invalidate: MAINTENANCE_KEYS }),
+})
+
+/* ===========================================================================
+ * Pagos
+ * ======================================================================== */
+const PAYMENT_KEYS = [['payments']]
+
+export const usePaymentSettings = () =>
+  useQuery({ queryKey: ['payments', 'settings'], queryFn: paymentsApi.settings })
+
+export const usePaymentServiceTypes = () =>
+  useQuery({ queryKey: ['payments', 'service-types'], queryFn: paymentsApi.serviceTypes })
+
+export const usePaymentAccounts = () =>
+  useQuery({ queryKey: ['payments', 'accounts'], queryFn: paymentsApi.accounts })
+
+export const usePaymentCharges = (accountId) => useQuery({
+  queryKey: ['payments', 'charges', accountId], queryFn: () => paymentsApi.charges(accountId), enabled: Boolean(accountId),
+})
+
+export const useAccountPayments = (accountId) => useQuery({
+  queryKey: ['payments', 'account-payments', accountId],
+  queryFn: () => paymentsApi.accountPayments(accountId),
+  enabled: Boolean(accountId),
+})
+
+export const useMissingPaymentAccounts = () =>
+  useQuery({ queryKey: ['payments', 'missing-accounts'], queryFn: paymentsApi.missingAccounts })
+
+export const usePayments = (from, to) => useQuery({
+  queryKey: ['payments', 'list', from, to], queryFn: () => paymentsApi.payments(from, to), enabled: Boolean(from && to),
+})
+
+export const usePaymentActions = () => ({
+  register: useAppMutation(paymentsApi.register, { success: 'Pago registrado', invalidate: PAYMENT_KEYS }),
+  void: useAppMutation(paymentsApi.void, { success: 'Pago anulado', invalidate: PAYMENT_KEYS }),
+  saveAccount: useAppMutation(paymentsApi.saveAccount, {
+    success: (_data, variables) => (variables.id ? 'Cuenta actualizada' : 'Cuenta abierta'), invalidate: PAYMENT_KEYS,
+  }),
+  enroll: useAppMutation(paymentsApi.enroll, {
+    success: (_data, variables) => (variables.pay_now ? 'Cuenta de pagos abierta y pago registrado' : 'Cuenta de pagos abierta'),
+    invalidate: PAYMENT_KEYS,
+  }),
+  openAccounts: useAppMutation(paymentsApi.openAccounts, {
+    success: (count) => (count === 1 ? 'Cuenta abierta' : `${count} cuentas abiertas`),
+    invalidate: PAYMENT_KEYS,
+  }),
+  adjustCharge: useAppMutation(paymentsApi.adjustCharge, { success: 'Cuota ajustada', invalidate: PAYMENT_KEYS }),
+  saveSettings: useAppMutation(paymentsApi.saveSettings, { success: 'Criterios guardados', invalidate: PAYMENT_KEYS }),
+  saveServiceType: useAppMutation(paymentsApi.saveServiceType, { success: 'Servicio guardado', invalidate: PAYMENT_KEYS }),
 })

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { MapPin, Pencil, Plus, Users } from 'lucide-react'
-import { Badge, Button, Card, CardHeader, ConfirmDialog, Dialog, Input, QueryBoundary, SearchInput, Select } from '@/components/ui'
+import { MapPin, Pencil, Plus, Users, X } from 'lucide-react'
+import { Badge, Button, Card, CardHeader, Combobox, ConfirmDialog, Dialog, Input, QueryBoundary, SearchInput, Select } from '@/components/ui'
 import { useColporteurActions, usePeopleRegistry, useRotations, useTeams } from '@/hooks/useCepev'
 import { useAuth } from '@/lib/auth'
 import { addDays, formatDate, todayISO } from '@/lib/utils'
@@ -17,9 +17,9 @@ export default function TeamsTab() {
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({})
   const [canceling, setCanceling] = useState(null)
+  const [removing, setRemoving] = useState(null)
   const [showPast, setShowPast] = useState(false)
   const teams = teamsQuery.data ?? []
-  const people = peopleQuery.data ?? []
   const rotations = rotationsQuery.data ?? []
   const today = todayISO()
   const busy = Object.values(actions).some((mutation) => mutation.isPending)
@@ -32,6 +32,8 @@ export default function TeamsTab() {
     }
     return result
   }, [peopleQuery.data])
+  /** Solo se asigna a quien no está en ningún equipo: para moverlo, primero se quita del suyo. */
+  const available = peopleByTeam.get(null) ?? []
   const visibleTeams = teams.filter((team) => normalizeSearch(team.name + ' ' + team.base_name)
     .includes(normalizeSearch(search)))
   const open = (kind, values) => { setModal(kind); setForm(values) }
@@ -46,7 +48,8 @@ export default function TeamsTab() {
       <SearchInput aria-label="Buscar equipo por municipio" placeholder="Buscar equipo o municipio" value={search} onChange={(event) => setSearch(event.target.value)} />
       {canWrite && <div className="flex flex-wrap gap-2">
         <Button disabled={busy} onClick={() => open('team', { municipality_code: '' })}><Plus /> Crear equipo</Button>
-        <Button variant="secondary" disabled={busy || !eligibleTeams.length || !peopleQuery.isSuccess}
+        <Button variant="secondary" disabled={busy || !eligibleTeams.length || !peopleQuery.isSuccess || !available.length}
+          title={peopleQuery.isSuccess && !available.length ? 'Todos los colportores tienen equipo' : undefined}
           onClick={() => open('assignment', { person_id: '', team_id: '' })}><Users /> Asignar colportor</Button>
       </div>}
     </div>
@@ -63,7 +66,18 @@ export default function TeamsTab() {
             </p>}
             <QueryBoundary query={peopleQuery}>
               <div className="flex flex-wrap gap-2">
-                {(peopleByTeam.get(team.id) ?? []).map((person) => <Badge key={person.id} className="max-w-full whitespace-normal" tone={person.is_available ? 'navy' : 'gold'}>{person.full_name}</Badge>)}
+                {(peopleByTeam.get(team.id) ?? []).map((person) => (
+                  <Badge key={person.id} className="max-w-full whitespace-normal" tone={person.is_available ? 'navy' : 'gold'}>
+                    {person.full_name}
+                    {canWrite && (
+                      <button type="button" disabled={busy} aria-label={`Quitar a ${person.full_name} del equipo`}
+                        title="Quitar del equipo" className="-mr-1 ml-0.5 rounded p-0.5 hover:bg-navy-100 disabled:opacity-50"
+                        onClick={() => setRemoving({ person, team })}>
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </Badge>
+                ))}
                 {!peopleByTeam.get(team.id)?.length && <p className="text-sm text-ink-soft">Sin colportores asignados.</p>}
               </div>
             </QueryBoundary>
@@ -72,7 +86,8 @@ export default function TeamsTab() {
                 onClick={() => open('team', { id: team.id, municipality_code: team.municipality_code ?? '' })}>
                 <Pencil /> {team.municipality_code ? 'Cambiar municipio base' : 'Asignar municipio'}
               </Button>
-              <Button variant="secondary" size="sm" disabled={busy || !team.municipality_code}
+              <Button variant="secondary" size="sm" disabled={busy || !team.municipality_code || !available.length}
+                title={!available.length ? 'Todos los colportores tienen equipo' : undefined}
                 onClick={() => open('assignment', { person_id: '', team_id: team.id })}><Users /> Asignar colportor</Button>
               <Button variant="secondary" size="sm" disabled={busy || !team.municipality_code}
                 onClick={() => open('rotation', { team_id: team.id, municipality_code: '', start_date: today, end_date: addDays(today, 7) })}>
@@ -144,12 +159,23 @@ export default function TeamsTab() {
         </>}
         {modal === 'assignment' && <>
           <QueryBoundary query={peopleQuery}>
-            <Select label="Colportor" required value={form.person_id} onChange={update('person_id')} placeholder="Selecciona una persona"
-              options={people.map((person) => ({ value: person.id, label: person.full_name }))} />
+            <Combobox label="Colportor sin equipo" className="sm:col-span-2" required value={form.person_id}
+              onChange={(personId) => setForm((current) => ({ ...current, person_id: personId }))}
+              placeholder="Escribe el nombre" emptyText="Ningún colportor sin equipo coincide"
+              options={available.map((person) => ({
+                value: person.id,
+                label: person.full_name,
+                detail: [person.is_available ? null : 'Inactivo', person.document_id].filter(Boolean).join(' · ') || undefined,
+              }))}
+              hint={available.length
+                ? `${available.length} ${available.length === 1 ? 'colportor disponible' : 'colportores disponibles'}. Quien ya está en un equipo no aparece.`
+                : 'Todos los colportores tienen equipo.'} />
           </QueryBoundary>
-          <Select label="Equipo de destino" value={form.team_id} onChange={update('team_id')} placeholder="Dejar sin equipo"
+          <Select label="Equipo" className="sm:col-span-2" required value={form.team_id} onChange={update('team_id')} placeholder="Selecciona el equipo"
             options={eligibleTeams.map((team) => ({ value: team.id, label: team.name }))} />
-          <p className="text-sm text-ink-soft sm:col-span-2">La asignación reemplaza el equipo actual de esta persona. Sus ventas anteriores conservan el equipo registrado.</p>
+          <p className="text-sm text-ink-soft sm:col-span-2">
+            Para cambiar a alguien de equipo, quítalo primero del suyo con la ✕ junto a su nombre. Sus ventas anteriores conservan el equipo registrado.
+          </p>
         </>}
         {modal === 'rotation' && <>
           <Select label="Equipo" required disabled={Boolean(form.id)} value={form.team_id} onChange={update('team_id')} placeholder="Selecciona un equipo"
@@ -162,6 +188,12 @@ export default function TeamsTab() {
         </>}
       </form>
     </Dialog>
+    <ConfirmDialog open={Boolean(removing)} onClose={() => { if (!busy) setRemoving(null) }}
+      loading={actions.assignTeam.isPending}
+      title={removing ? `Quitar a ${removing.person.full_name} de ${removing.team.name}` : ''}
+      description="Queda sin equipo y vuelve a estar disponible para asignarlo a otro. Sus ventas anteriores conservan el equipo registrado."
+      confirmLabel="Quitar del equipo"
+      onConfirm={() => actions.assignTeam.mutate({ person_id: removing.person.id, team_id: null }, { onSuccess: () => setRemoving(null) })} />
     <ConfirmDialog open={Boolean(canceling)} onClose={() => { if (!busy) setCanceling(null) }}
       title="Cancelar rotación futura" description={canceling ? canceling.city + ' · ' + formatDate(canceling.start_date) : ''}
       confirmLabel="Cancelar rotación" loading={actions.cancelRotation.isPending}

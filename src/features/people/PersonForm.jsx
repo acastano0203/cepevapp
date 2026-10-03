@@ -2,6 +2,7 @@ import { Save, X } from 'lucide-react'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { PERSON_CLASSIFICATIONS, SEX_GROUPS } from '@/lib/constants'
 import { todayISO } from '@/lib/utils'
+import { AccountSummary, EnrollmentFields, emptyEnrollment } from '@/features/payments/PaymentEnrollment'
 
 export const DOCUMENT_TYPES = [
   { value: 'CC', label: 'CC · Cédula de ciudadanía' },
@@ -30,6 +31,8 @@ export function emptyPerson(config) {
     license_number: '',
     license_expiry: '',
     classification: '',
+    // Cuenta de pagos que se abre junto con la ficha (cepevistas y colportores)
+    payment: config?.paymentConcept ? emptyEnrollment(config.paymentConcept) : null,
   }
 }
 
@@ -227,6 +230,13 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
             { value: 'inactivo', label: 'Inactivo' },
           ]}
         />
+
+        {config.paymentConcept && (isNew
+          ? value.payment && (
+            <EnrollmentFields value={value.payment}
+              onChange={(payment) => onChange({ ...value, payment })} />
+          )
+          : <AccountSummary personId={value.id} />)}
 
         <Textarea
           label="Observaciones"

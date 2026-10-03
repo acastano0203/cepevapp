@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth'
 
 function Topbar({ onOpenMenu }) {
   const { pathname } = useLocation()
-  const { role, canWrite, signOut } = useAuth()
+  const { role, canWrite, canReport, signOut } = useAuth()
   const current = NAV_ITEMS.find((item) => item.to === pathname) ?? NAV_ITEMS[0]
 
   return (
@@ -31,7 +31,7 @@ function Topbar({ onOpenMenu }) {
 
       <div className="flex items-center gap-2">
         <span className="hidden items-center gap-1.5 rounded-md bg-navy-50 px-2.5 py-1.5 text-xs font-medium text-navy-600 sm:inline-flex">
-          {canWrite ? <ShieldCheck className="size-3.5" /> : <Eye className="size-3.5" />}
+          {canWrite || canReport ? <ShieldCheck className="size-3.5" /> : <Eye className="size-3.5" />}
           {ROLE_LABELS[role]}
         </span>
         <Button variant="secondary" size="sm" onClick={signOut}>
