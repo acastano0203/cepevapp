@@ -20,6 +20,7 @@ import {
   useTeams,
 } from '@/hooks/useCepev'
 import { useAuth } from '@/lib/auth'
+import { PERSON_CLASSIFICATIONS } from '@/lib/constants'
 import { cn, formatDate, formatNumber, matches } from '@/lib/utils'
 import { PersonForm, emptyPerson, toFormValues } from './PersonForm'
 import { getRegistryConfig } from './registryConfig'
@@ -47,6 +48,24 @@ function SpecificCell({ row, config }) {
     </span>
   ) : (
     <span className="text-ink-soft">Sin alojamiento</span>
+  )
+}
+
+const classificationLabel = (value) =>
+  PERSON_CLASSIFICATIONS.find((item) => item.value === value)?.label ?? value
+
+/** Licencia de conducción: número y fecha de expiración. */
+function LicenseCell({ row }) {
+  if (!row.has_driver_license) return <span className="text-ink-soft">Sin licencia</span>
+  return (
+    <>
+      <span className="font-medium">{row.license_number}</span>
+      <br />
+      <span className={row.license_expired ? 'text-[var(--color-danger-fg)]' : 'text-ink-soft'}>
+        {row.license_expired ? 'Venció' : 'Vence'}{' '}
+        {formatDate(row.license_expiry, { month: 'short', year: 'numeric' })}
+      </span>
+    </>
   )
 }
 
@@ -122,8 +141,22 @@ function ReadRow({ row, config, canWrite, ...handlers }) {
         )}
         <span className={config.showTeam ? 'text-ink-soft' : undefined}>{row.current_city}</span>
       </td>
+      {config.showClassification && (
+        <td className="px-4 py-3 text-xs">
+          {row.classification ? (
+            classificationLabel(row.classification)
+          ) : (
+            <span className="text-ink-soft">Sin clasificar</span>
+          )}
+        </td>
+      )}
       {config.showGoal && (
         <td className="px-4 py-3 text-sm whitespace-nowrap">{row.daily_goal} / día</td>
+      )}
+      {config.showLicense && (
+        <td className="px-4 py-3 text-xs whitespace-nowrap">
+          <LicenseCell row={row} />
+        </td>
       )}
       <td className="px-4 py-3 text-xs">
         <SpecificCell row={row} config={config} />
@@ -166,6 +199,14 @@ function ReadCard({ row, config, canWrite, ...handlers }) {
             {row.current_city}
           </dd>
         </div>
+        {config.showClassification && (
+          <div>
+            <dt className="text-ink-soft">Clasificación</dt>
+            <dd className="font-medium">
+              {row.classification ? classificationLabel(row.classification) : 'Sin clasificar'}
+            </dd>
+          </div>
+        )}
         {config.showGoal && (
           <div>
             <dt className="text-ink-soft">Meta diaria</dt>
@@ -184,6 +225,14 @@ function ReadCard({ row, config, canWrite, ...handlers }) {
             )}
           </dd>
         </div>
+        {config.showLicense && (
+          <div className="col-span-2">
+            <dt className="text-ink-soft">Licencia de conducción</dt>
+            <dd>
+              <LicenseCell row={row} />
+            </dd>
+          </div>
+        )}
         <div className="col-span-2">
           <dt className="text-ink-soft">{config.showResults ? 'Resultados' : 'Alojamiento'}</dt>
           <dd className="font-medium">
@@ -237,7 +286,7 @@ export function PeopleRegistry({ kind }) {
   const visible = useMemo(
     () =>
       rows.filter((row) => {
-        const haystack = `${row.full_name} ${row.document_id ?? ''} ${row.email ?? ''} ${
+        const haystack = `${row.full_name} ${row.document_id ?? ''} ${row.license_number ?? ''} ${row.email ?? ''} ${
           row.team_name ?? ''
         } ${row.current_city} ${row.phone ?? ''}`
         if (!matches(haystack, search)) return false
@@ -252,7 +301,9 @@ export function PeopleRegistry({ kind }) {
     config.showResults ? 'Colportor' : 'Cepevista',
     'Contacto',
     config.showTeam ? 'Equipo / ciudad' : 'Procedencia',
+    ...(config.showClassification ? ['Clasificación'] : []),
     ...(config.showGoal ? ['Meta'] : []),
+    ...(config.showLicense ? ['Licencia'] : []),
     config.showResults ? 'Resultados' : 'Alojamiento',
     'Estado',
     '',

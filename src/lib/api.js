@@ -24,12 +24,14 @@ export const peopleApi = {
   list: (filters = {}) => {
     let query = supabase
       .from('people')
-      .select('id, full_name, sex, birth_date, phone, base_city, kind, team_id, daily_goal, is_available, teams(name)')
+      .select('id, full_name, sex, birth_date, phone, base_city, kind, team_id, daily_goal, is_available, has_driver_license, license_number, license_expiry, teams(name)')
       .order('full_name')
 
     if (filters.kind) query = query.eq('kind', filters.kind)
     if (filters.kinds?.length) query = query.in('kind', filters.kinds)
     if (filters.available) query = query.eq('is_available', true)
+    // Solo personas con licencia de conduccion vigente
+    if (filters.licensed) query = query.eq('has_driver_license', true).gte('license_expiry', todayISO())
     return runQuery(query)
   },
 
@@ -58,6 +60,10 @@ export const peopleApi = {
         p_document_type: payload.document_type || null,
         p_document_id: payload.document_id || null,
         p_email: payload.email || null,
+        p_has_license: Boolean(payload.has_driver_license),
+        p_license_number: payload.has_driver_license ? payload.license_number || null : null,
+        p_license_expiry: payload.has_driver_license ? payload.license_expiry || null : null,
+        p_classification: payload.classification || null,
       }),
     ),
 
@@ -92,8 +98,15 @@ export const kitchenApi = {
         .lte('service_date', addDays(startDate, 6)),
     ),
 
-  autofill: (date, perTask = 3) =>
-    runQuery(supabase.rpc('kitchen_autofill', { p_date: date, p_per_task: perTask })),
+  /** Cupo de servidores (minimo y maximo) de cada comida. */
+  limits: () =>
+    runQuery(supabase.from('kitchen_meal_limits').select('meal, min_people, max_people')),
+
+  setLimits: ({ meal, min, max }) =>
+    runQuery(supabase.rpc('kitchen_set_limits', { p_meal: meal, p_min: min, p_max: max })),
+
+  /** La propuesta completa cada comida hasta su minimo de servidores. */
+  autofill: (date) => runQuery(supabase.rpc('kitchen_autofill', { p_date: date })),
   publish: (date) => runQuery(supabase.rpc('kitchen_publish', { p_date: date })),
 
   /** Suma una persona a la grilla de una comida. Los puestos no tienen tope. */
@@ -106,6 +119,27 @@ export const kitchenApi = {
         p_person: personId,
       }),
     ),
+
+  /**
+   * Suma varias personas a la misma comida y tarea. Sigue con las demás si el
+   * servidor rechaza a alguna, y devuelve quiénes entraron y quiénes no.
+   */
+  addMany: async ({ date, meal, task, people }) => {
+    const added = []
+    const failed = []
+    for (const person of people) {
+      try {
+        await kitchenApi.add({ date, meal, task, personId: person.id })
+        added.push(person)
+      } catch (error) {
+        failed.push({ person, message: error.message })
+      }
+    }
+    if (!added.length && failed.length) {
+      throw new Error(failed.map((f) => `${f.person.full_name}: ${f.message}`).join(' · '))
+    }
+    return { meal, added, failed }
+  },
 
   /** Quita de la grilla los puestos seleccionados. */
   remove: async ({ shiftIds }) => {
@@ -134,16 +168,22 @@ export const lodgingApi = {
     runQuery(
       supabase
         .from('stays')
-        .select('id, start_date, end_date, status, checked_in_at, people(id, full_name), beds(label, rooms(code))')
+        .select('id, start_date, end_date, status, checked_in_at, people(id, full_name), stay_children(full_name, age), beds(label, rooms!room_id(code))')
         .order('created_at', { ascending: false })
         .limit(limit),
+    ),
+
+  /** Reservas y estadías vigentes: sirven para saber qué camas están libres en unas fechas. */
+  activeStays: () =>
+    runQuery(
+      supabase.from('stays').select('id, bed_id, person_id, start_date, end_date, stay_children(full_name, age)').in('status', ['Reservado', 'Alojado']),
     ),
 
   pendingCheckouts: () =>
     runQuery(
       supabase
         .from('stays')
-        .select('id, start_date, end_date, status, people(id, full_name), beds(label, rooms(code))')
+        .select('id, start_date, end_date, status, people(id, full_name), stay_children(full_name, age), beds(label, rooms!room_id(code))')
         .eq('status', 'Alojado')
         .lte('end_date', todayISO())
         .order('end_date'),
@@ -168,16 +208,65 @@ export const lodgingApi = {
         p_start: payload.start_date,
         p_end: payload.end_date,
         p_notes: payload.notes ?? null,
+        // Niños de 5 años o menos que duermen en la misma cama del adulto
+        p_children: payload.has_children ? payload.children.map((child) => ({ full_name: child.full_name.trim(), age: Number(child.age) })) : null,
       }),
     ),
 
   checkIn: (stayId) => runQuery(supabase.rpc('stay_check_in', { p_stay: stayId })),
   checkOut: (stayId) => runQuery(supabase.rpc('stay_check_out', { p_stay: stayId })),
+
+  /** Crea o edita un dormitorio; el servidor ajusta sus camas al número pedido. */
+  saveRoom: (payload) =>
+    runQuery(
+      supabase.rpc('room_upsert', {
+        p_id: payload.id ?? null,
+        p_code: payload.code,
+        p_sex: payload.sex,
+        p_bunks: Number(payload.bunks),
+        p_captain: payload.captain_id || null,
+        p_captain_phone: payload.captain_phone,
+        p_captain_bed: payload.captain_bed || '01',
+        // Solo cuenta al cambiar de capitán: si el anterior se queda y en qué cama
+        p_old_captain_stays: Boolean(payload.old_captain_stays),
+        p_old_captain_bed: payload.old_captain_stays ? payload.old_captain_bed || null : null,
+        p_old_captain_end: payload.old_captain_stays ? payload.old_captain_end || null : null,
+      }),
+    ),
+
+  /** Novedades de los dormitorios (mantenimiento, quejas…), las más recientes primero. */
+  roomIssues: () =>
+    runQuery(
+      supabase
+        .from('room_issues')
+        .select('id, room_id, category, priority, detail, status, reported_by_name, resolution, resolved_at, resolved_by_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ),
+
+  createRoomIssue: (payload) =>
+    runQuery(
+      supabase.rpc('room_issue_create', {
+        p_room: payload.room_id,
+        p_category: payload.category,
+        p_detail: payload.detail,
+        p_priority: payload.priority,
+      }),
+    ),
+
+  resolveRoomIssue: ({ id, resolution }) =>
+    runQuery(supabase.rpc('room_issue_resolve', { p_issue: id, p_resolution: resolution || null })),
+
+  reopenRoomIssue: (id) => runQuery(supabase.rpc('room_issue_reopen', { p_issue: id })),
+
+  deleteRoom: ({ id, force = false }) => runQuery(supabase.rpc('room_delete', { p_id: id, p_force: force })),
 }
 
 /* ===========================================================================
  * Flota
  * ======================================================================== */
+const VEHICLE_DOCUMENTS_BUCKET = 'vehicle-documents'
+
 export const fleetApi = {
   vehicles: () => runQuery(supabase.from('v_fleet_status').select('*').order('name')),
 
@@ -208,8 +297,50 @@ export const fleetApi = {
         .limit(limit),
     ),
 
-  /** Alta y edicion de la ficha del vehiculo. Sin id, crea. */
-  saveVehicle: (payload) =>
+  /**
+   * Alta y edicion de la ficha del vehiculo. Sin id, crea.
+   * Despues de guardar la ficha sube la planilla de servicio publico, si se
+   * eligio un archivo, o la retira si el vehiculo paso a particular.
+   */
+  saveVehicle: async (payload) => {
+    const vehicle = await fleetApi.upsertVehicle(payload)
+    const previousFile = payload.public_service_file || null
+
+    if (payload.service_type === 'Publico' && payload.public_service_upload) {
+      const file = payload.public_service_upload
+      const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'pdf'
+      const path = `${vehicle.id}/planilla-servicio-publico-${Date.now()}.${extension}`
+      try {
+        await runQuery(
+          supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).upload(path, file, { contentType: file.type }),
+        )
+        await runQuery(
+          supabase.rpc('vehicle_set_public_service_file', { p_id: vehicle.id, p_path: path, p_file_name: file.name }),
+        )
+      } catch (error) {
+        const partial = new Error(
+          `La ficha se guardó, pero no se pudo subir la planilla (${error.message}). Edita el vehículo para intentarlo de nuevo.`,
+        )
+        partial.vehicleSaved = true
+        throw partial
+      }
+      if (previousFile) await supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).remove([previousFile])
+    } else if ((payload.service_type !== 'Publico' || payload.remove_public_service_file) && previousFile) {
+      await runQuery(
+        supabase.rpc('vehicle_set_public_service_file', { p_id: vehicle.id, p_path: null, p_file_name: null }),
+      )
+      await supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).remove([previousFile])
+    }
+    return vehicle
+  },
+
+  /** Enlace temporal (10 minutos) para ver un documento privado del vehiculo. */
+  documentUrl: async (path) => {
+    const data = await runQuery(supabase.storage.from(VEHICLE_DOCUMENTS_BUCKET).createSignedUrl(path, 600))
+    return data.signedUrl
+  },
+
+  upsertVehicle: (payload) =>
     runQuery(
       supabase.rpc('vehicle_upsert', {
         p_id: payload.id || null,
@@ -224,6 +355,14 @@ export const fleetApi = {
         p_next_date: payload.next_service_date || null,
         p_status: payload.status,
         p_driver: payload.driver_id || null,
+        p_ownership: payload.ownership || 'CEPEV',
+        p_owner: payload.ownership === 'Externo' ? payload.owner_id || null : null,
+        p_owner_name:
+          payload.ownership === 'Externo' && !payload.owner_id ? payload.owner_name || null : null,
+        p_owner_phone: payload.ownership === 'Externo' ? payload.owner_phone || null : null,
+        p_service_type: payload.service_type || 'Particular',
+        p_soat_expiry: payload.soat_expiry || null,
+        p_insurance_expiry: payload.insurance_expiry || null,
       }),
     ),
 

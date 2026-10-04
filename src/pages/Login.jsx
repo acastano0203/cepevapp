@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { LogIn, MapPin, TriangleAlert } from 'lucide-react'
+import { LogIn, TriangleAlert } from 'lucide-react'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 import { Button, Input } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
@@ -35,55 +35,43 @@ export default function Login() {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Panel de marca */}
-      <div className="relative isolate flex flex-col items-center justify-center overflow-hidden bg-navy-700 px-6 py-12 text-center text-white sm:px-10 lg:px-14 lg:py-16">
+    <div className="min-h-dvh lg:grid lg:grid-cols-2">
+      {/* Panel de marca: solo en pantallas anchas */}
+      <div className="relative isolate hidden flex-col justify-center overflow-hidden bg-navy-700 px-14 text-white lg:flex xl:px-20">
         {/* Halo dorado: da profundidad sin competir con el logo */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-32 left-1/2 -z-10 size-120 -translate-x-1/2 rounded-full bg-gold-500/10 blur-3xl"
+          className="pointer-events-none absolute -top-24 -left-24 -z-10 size-96 rounded-full bg-gold-500/10 blur-3xl"
         />
 
-        <BrandLogo
-          className="size-28 shadow-lg shadow-navy-900/30 sm:size-32 lg:size-36"
-          fallbackClassName="text-2xl"
-        />
+        <BrandLogo className="size-20 shadow-lg shadow-navy-900/30" fallbackClassName="text-xl" />
 
-        <p className="mt-7 text-[11px] font-bold tracking-[0.32em] text-gold-400">CEPEV</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-[0.04em] uppercase sm:text-4xl lg:text-5xl">
-          Gestión integral
-        </h1>
-        <span aria-hidden="true" className="mt-6 block h-px w-16 bg-gold-500" />
+        <p className="mt-10 text-[11px] font-bold tracking-[0.32em] text-gold-400">CEPEV</p>
+        <h1 className="mt-3 text-4xl font-bold tracking-tight xl:text-5xl">Sistema de gestión</h1>
+        <span aria-hidden="true" className="mt-8 block h-px w-16 bg-gold-500" />
 
-        <p className="mt-6 max-w-md text-sm leading-relaxed text-navy-100 sm:text-base">
-          La operación del centro en un solo lugar. Cocina, alojamientos, flota y colportaje
-          coordinados con reglas que evitan cruces de horario, camas duplicadas y reportes
-          repetidos.
-        </p>
-
-        <p className="mt-10 flex items-center gap-2 text-xs text-navy-200">
-          <MapPin className="size-3.5 shrink-0 text-gold-400" aria-hidden="true" />
-          Centro de Perfeccionamiento de Líderes y Colportores · Piedecuesta, Colombia
-        </p>
+        <p className="mt-8 text-sm text-navy-200">Piedecuesta, Colombia</p>
       </div>
 
       {/* Formulario */}
-      <div className="flex items-center justify-center bg-[#f6f8fb] px-4 py-12 sm:px-8">
+      <div className="flex min-h-dvh items-center justify-center bg-[#f6f8fb] px-4 py-10 sm:px-8 lg:min-h-0">
         <div className="w-full max-w-sm">
-          <div className="surface px-6 py-7 shadow-sm sm:px-8 sm:py-9">
-            <h2 className="text-2xl font-bold tracking-tight text-ink">
+          {/* Marca compacta para móvil y tablet */}
+          <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+            <BrandLogo className="size-16" fallbackClassName="text-lg" />
+            <p className="mt-4 text-[11px] font-bold tracking-[0.32em] text-gold-600">CEPEV</p>
+            <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-ink">Sistema de gestión</h1>
+          </div>
+
+          <div className="surface px-6 py-7 shadow-sm sm:px-8 sm:py-8">
+            <h2 className="text-xl font-bold tracking-tight text-ink">
               {mode === 'signin' ? 'Ingresar' : 'Crear cuenta'}
             </h2>
-            <p className="mt-2 text-sm text-ink-soft">
-              {mode === 'signin'
-                ? 'Usa el correo autorizado por la coordinación.'
-                : 'Tu cuenta inicia con permiso de solo lectura hasta que se asigne un rol.'}
-            </p>
 
             {!isSupabaseConfigured && (
               <p className="mt-5 flex gap-2 rounded-lg bg-gold-100 px-3 py-2.5 text-xs text-gold-700">
                 <TriangleAlert className="size-4 shrink-0" />
-                Falta configurar las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
+                Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
               </p>
             )}
 
@@ -142,10 +130,6 @@ export default function Login() {
               </button>
             </div>
           </div>
-
-          <p className="mt-6 text-center text-xs text-ink-soft">
-            El acceso queda registrado en la bitácora del centro.
-          </p>
         </div>
       </div>
     </div>

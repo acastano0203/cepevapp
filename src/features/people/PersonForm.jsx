@@ -1,6 +1,6 @@
 import { Save, X } from 'lucide-react'
 import { Button, Input, Select, Textarea } from '@/components/ui'
-import { SEX_GROUPS } from '@/lib/constants'
+import { PERSON_CLASSIFICATIONS, SEX_GROUPS } from '@/lib/constants'
 import { todayISO } from '@/lib/utils'
 
 export const DOCUMENT_TYPES = [
@@ -26,6 +26,10 @@ export function emptyPerson(config) {
     daily_goal: config?.defaultGoal ?? 0,
     is_available: true,
     notes: '',
+    has_driver_license: false,
+    license_number: '',
+    license_expiry: '',
+    classification: '',
   }
 }
 
@@ -45,6 +49,10 @@ export function toFormValues(row) {
     daily_goal: row.daily_goal ?? 0,
     is_available: row.is_available ?? true,
     notes: row.notes ?? '',
+    has_driver_license: row.has_driver_license ?? false,
+    license_number: row.license_number ?? '',
+    license_expiry: row.license_expiry ?? '',
+    classification: row.classification ?? '',
   }
 }
 
@@ -137,6 +145,17 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
           hint={config.showTeam ? 'Si su equipo tiene rotación, esta se impone' : undefined}
         />
 
+        {config.showClassification && (
+          <Select
+            label="Clasificación *"
+            required
+            value={value.classification}
+            onChange={update('classification')}
+            placeholder="Selecciona una clasificación"
+            options={PERSON_CLASSIFICATIONS}
+          />
+        )}
+
         {config.showTeam && (
           <Select
             label="Equipo"
@@ -156,6 +175,47 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
             value={value.daily_goal}
             onChange={update('daily_goal')}
           />
+        )}
+
+        {config.showLicense && (
+          <>
+            <Select
+              label="¿Tiene licencia de conducción?"
+              value={value.has_driver_license ? 'si' : 'no'}
+              onChange={(event) =>
+                onChange({ ...value, has_driver_license: event.target.value === 'si' })
+              }
+              options={[
+                { value: 'no', label: 'No' },
+                { value: 'si', label: 'Sí' },
+              ]}
+            />
+            {value.has_driver_license && (
+              <>
+                <Input
+                  label="Número de licencia *"
+                  required
+                  inputMode="numeric"
+                  value={value.license_number}
+                  onChange={update('license_number')}
+                  placeholder="1098765432"
+                  hint="Sin puntos ni espacios"
+                />
+                <Input
+                  label="Fecha de expiración *"
+                  type="date"
+                  required
+                  value={value.license_expiry}
+                  onChange={update('license_expiry')}
+                  error={
+                    value.license_expiry && value.license_expiry < todayISO()
+                      ? 'La licencia está vencida'
+                      : undefined
+                  }
+                />
+              </>
+            )}
+          </>
         )}
 
         <Select
