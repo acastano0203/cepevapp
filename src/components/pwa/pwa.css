@@ -1,0 +1,7 @@
+.cepev-pwa{position:relative;z-index:35;padding:12px max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));background:#143a60;color:#fff;font-size:16px;line-height:1.5;border-bottom:3px solid #e6a31b}
+.cepev-pwa p{margin:0;flex:1 1 250px}
+.cepev-pwa-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:1540px;margin:auto}
+.cepev-pwa button{font:inherit;font-weight:600;background:#e6a31b;color:#102c49;border:1px solid transparent;border-radius:6px;padding:9px 16px;min-height:44px;cursor:pointer}
+.cepev-pwa button.cepev-pwa-secondary{background:transparent;color:white;border-color:#8196ab}
+.cepev-pwa button:focus-visible{outline:3px solid white;outline-offset:3px}
+.cepev-pwa button:disabled{opacity:.6;cursor:not-allowed}
