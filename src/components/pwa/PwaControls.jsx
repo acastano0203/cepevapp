@@ -2,11 +2,21 @@ import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import './pwa.css'
 
+// iOS Safari has no beforeinstallprompt: the only way to install is Share → Add to Home Screen.
+const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const IOS_HINT_KEY = 'cepev-ios-install-hint-dismissed'
+
+function readIosHintDismissed() {
+  try { return localStorage.getItem(IOS_HINT_KEY) === '1' } catch { return false }
+}
+
 export function PwaControls() {
   const [installPrompt, setInstallPrompt] = useState(null)
   const [online, setOnline] = useState(navigator.onLine)
-  const [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches)
+  const [installed, setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true)
   const [dismissed, setDismissed] = useState(false)
+  const [iosHintDismissed, setIosHintDismissed] = useState(readIosHintDismissed)
   const [registration, setRegistration] = useState(null)
   const [message, setMessage] = useState('')
   const {
@@ -72,8 +82,14 @@ export function PwaControls() {
     }
   }
 
+  function dismissIosHint() {
+    setIosHintDismissed(true)
+    try { localStorage.setItem(IOS_HINT_KEY, '1') } catch { /* private mode: hide only for this visit */ }
+  }
+
   const showInstall = installPrompt && !installed && !dismissed
-  if (online && !needRefresh && !showInstall && !message) return null
+  const showIosHint = isIos && !installed && !iosHintDismissed
+  if (online && !needRefresh && !showInstall && !showIosHint && !message) return null
 
   return (
     <aside className="cepev-pwa" aria-label="Instalación y conexión">
@@ -87,6 +103,10 @@ export function PwaControls() {
         <p>Abre CEPEV desde su propio icono.</p>
         <button type="button" onClick={install}>Instalar CEPEV</button>
         <button type="button" className="cepev-pwa-secondary" onClick={() => setDismissed(true)}>Ahora no</button>
+      </div>}
+      {showIosHint && !needRefresh && <div className="cepev-pwa-row">
+        <p>Para instalar CEPEV en tu iPhone, toca <strong>Compartir</strong> (el cuadro con la flecha hacia arriba) y luego <strong>Agregar a pantalla de inicio</strong>.</p>
+        <button type="button" className="cepev-pwa-secondary" onClick={dismissIosHint}>Entendido</button>
       </div>}
       {message && <p role="status">{message}</p>}
     </aside>
