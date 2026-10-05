@@ -1,4 +1,5 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const CONTROL =
@@ -21,6 +22,29 @@ export function Input({ label, hint, error, className, ...props }) {
   return (
     <Field label={label} hint={hint} error={error} className={className} htmlFor={id}>
       <input id={id} className={cn(CONTROL, 'h-11')} {...props} />
+    </Field>
+  )
+}
+
+// Hidden by default; the eye only reveals the text while the user keeps it open.
+export function PasswordInput({ label, hint, error, className, ...props }) {
+  const id = useId()
+  const [visible, setVisible] = useState(false)
+  return (
+    <Field label={label} hint={hint} error={error} className={className} htmlFor={id}>
+      <div className="relative">
+        <input id={id} {...props} type={visible ? 'text' : 'password'} className={cn(CONTROL, 'h-11 pr-12')} />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          aria-pressed={visible}
+          aria-controls={id}
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-ink-soft transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-navy-400"
+        >
+          {visible ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+        </button>
+      </div>
     </Field>
   )
 }

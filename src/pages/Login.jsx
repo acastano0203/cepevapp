@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LogIn, TriangleAlert } from 'lucide-react'
 import { BrandLogo } from '@/components/layout/BrandLogo'
-import { Button, Input } from '@/components/ui'
+import { Button, Input, PasswordInput } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
 import { isSupabaseConfigured } from '@/lib/supabase'
 
@@ -76,9 +76,8 @@ export default function Login() {
                 autoComplete="email"
                 required
               />
-              <Input
+              <PasswordInput
                 label="Contraseña"
-                type="password"
                 value={form.password}
                 onChange={update('password')}
                 autoComplete="current-password"
