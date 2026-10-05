@@ -5,20 +5,38 @@ import { Button, Input, PasswordInput } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
 import { isSupabaseConfigured } from '@/lib/supabase'
 
+// Only the user is remembered (never the password), and only after a successful login.
+const LAST_USER_KEY = 'cepev-last-user'
+
+function readLastUser() {
+  try { return localStorage.getItem(LAST_USER_KEY) ?? '' } catch { return '' }
+}
+
 export default function Login() {
   const { signIn } = useAuth()
-  const [form, setForm] = useState({ email: '', password: '' })
+  const [form, setForm] = useState(() => ({ email: readLastUser(), password: '' }))
+  // True while the field still shows the remembered user untouched.
+  const [prefilled, setPrefilled] = useState(() => form.email !== '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const update = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))
+
+  // Tapping the remembered user clears it to type another one; after that it behaves normally.
+  function clearPrefilledUser() {
+    if (!prefilled) return
+    setPrefilled(false)
+    setForm((prev) => ({ ...prev, email: '' }))
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await signIn(form.email.trim(), form.password)
+      const email = form.email.trim()
+      await signIn(email, form.password)
+      try { localStorage.setItem(LAST_USER_KEY, email) } catch { /* private mode: nothing to remember */ }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -69,11 +87,12 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
               <Input
-                label="Correo"
+                label="Usuario"
                 type="email"
                 value={form.email}
-                onChange={update('email')}
-                autoComplete="email"
+                onChange={(event) => { setPrefilled(false); update('email')(event) }}
+                onFocus={clearPrefilledUser}
+                autoComplete="username"
                 required
               />
               <PasswordInput
