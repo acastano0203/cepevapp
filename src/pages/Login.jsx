@@ -47,29 +47,29 @@ export default function Login() {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-2">
       {/* Panel de marca: solo en pantallas anchas */}
-      <div className="relative isolate hidden flex-col justify-center overflow-hidden bg-navy-700 px-14 text-white lg:flex xl:px-20">
-        {/* Halo dorado: da profundidad sin competir con el logo */}
+      <div className="relative isolate hidden flex-col justify-center overflow-hidden bg-[#dff3f6] px-14 text-ink lg:flex xl:px-20">
+        {/* Superficie suave de la identidad Brisa */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -left-24 -z-10 size-96 rounded-full bg-gold-500/10 blur-3xl"
+          className="pointer-events-none absolute -top-24 -left-24 -z-10 size-96 rounded-full bg-white/40 blur-3xl"
         />
 
-        <BrandLogo className="size-20 shadow-lg shadow-navy-900/30" fallbackClassName="text-xl" />
+        <BrandLogo className="size-20 rounded-3xl" fallbackClassName="text-xl" />
 
-        <p className="mt-10 text-[11px] font-bold tracking-[0.32em] text-gold-400">CEPEV</p>
+        <p className="mt-10 text-[11px] font-bold tracking-[0.32em] text-navy-600">CEPEV</p>
         <h1 className="mt-3 text-4xl font-bold tracking-tight xl:text-5xl">Sistema de gestión</h1>
-        <span aria-hidden="true" className="mt-8 block h-px w-16 bg-gold-500" />
+        <span aria-hidden="true" className="mt-8 block h-px w-16 bg-navy-500" />
 
-        <p className="mt-8 text-sm text-navy-200">Piedecuesta, Colombia</p>
+        <p className="mt-8 text-sm text-ink-soft">Piedecuesta, Colombia</p>
       </div>
 
       {/* Formulario */}
-      <div className="flex min-h-dvh items-center justify-center bg-[#f6f8fb] px-4 py-10 sm:px-8 lg:min-h-0">
+      <div className="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10 sm:px-8 lg:min-h-0">
         <div className="w-full max-w-sm">
           {/* Marca compacta para móvil y tablet */}
           <div className="mb-8 flex flex-col items-center text-center lg:hidden">
             <BrandLogo className="size-16" fallbackClassName="text-lg" />
-            <p className="mt-4 text-[11px] font-bold tracking-[0.32em] text-gold-600">CEPEV</p>
+            <p className="mt-4 text-[11px] font-bold tracking-[0.32em] text-navy-600">CEPEV</p>
             <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-ink">Sistema de gestión</h1>
           </div>
 
