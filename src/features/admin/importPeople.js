@@ -171,7 +171,6 @@ export function buildImport(records, { kind, existing = [], teams = [] }) {
     const payload = { ...base, kind, full_name: fullName || base.full_name, document_type: document.type, document_id: document.id }
 
     if (email !== undefined) payload.email = email
-    if (!payload.email) errors.push('falta el correo')
     if (has('phone')) payload.phone = clean(raw.phone)
     if (has('base_city') && clean(raw.base_city)) payload.base_city = clean(raw.base_city)
 

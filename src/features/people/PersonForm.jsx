@@ -109,9 +109,8 @@ export function PersonForm({ value, onChange, onSubmit, onCancel, teams = [], sa
           hint="Sin puntos ni espacios"
         />
         <Input
-          label="Correo electrónico *"
+          label="Correo electrónico"
           type="email"
-          required
           className="sm:col-span-2 xl:col-span-1"
           value={value.email}
           onChange={update('email')}
