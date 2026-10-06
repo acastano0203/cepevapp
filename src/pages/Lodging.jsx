@@ -41,6 +41,7 @@ import {
 import {
   useActiveStays,
   useRoomIssues,
+  useRoomCaptains,
   useArrivals,
   useBeds,
   useLodgingActions,
@@ -112,7 +113,7 @@ export default function Lodging() {
   const issuesQuery = useRoomIssues()
   const actions = useLodgingActions()
   const savePerson = useSavePerson()
-  const captainsQuery = usePeople({ kinds: ['Cepevista', 'Colportor'] })
+  const captainsQuery = useRoomCaptains(canWrite)
 
   const [search, setSearch] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -338,7 +339,8 @@ export default function Lodging() {
   }
 
   const captainCandidates = captainsQuery.data ?? []
-  const captainOptions = roomForm ? captainCandidates.filter((person) => person.sex === roomForm.sex) : []
+  const captainOptions = roomForm ? captainCandidates.filter((person) => !person.sex || person.sex === roomForm.sex) : []
+  const selectedCaptain = captainCandidates.find((person) => person.id === roomForm?.captain_id)
 
   /** Reserva vigente de una persona (si ya duerme en alguna cama). */
   const currentStayOf = (personId) =>
@@ -362,7 +364,8 @@ export default function Lodging() {
 
   const submitRoom = (event) => {
     event.preventDefault()
-    actions.saveRoom.mutate(roomForm, { onSuccess: () => setRoomForm(null) })
+    if (!selectedCaptain || captainsQuery.isError || captainsQuery.isPending) return
+    actions.saveRoom.mutate({ ...roomForm, captain_user_id: selectedCaptain.user_id }, { onSuccess: () => setRoomForm(null) })
   }
 
   const confirmDeleteRoom = () =>
@@ -906,7 +909,8 @@ export default function Lodging() {
             <Button variant="secondary" onClick={() => setRoomForm(null)}>
               Cancelar
             </Button>
-            <Button type="submit" form="room-form" loading={actions.saveRoom.isPending}>
+            <Button type="submit" form="room-form" loading={actions.saveRoom.isPending}
+              disabled={captainsQuery.isPending || captainsQuery.isError || !selectedCaptain}>
               Guardar
             </Button>
           </>
@@ -929,7 +933,7 @@ export default function Lodging() {
                 const sex = event.target.value
                 // El capitán debe ser de la misma sección: si ya no coincide, se quita
                 setRoomForm((prev) =>
-                  prev.captain_id && captainCandidates.find((person) => person.id === prev.captain_id)?.sex !== sex
+                  selectedCaptain?.sex && selectedCaptain.sex !== sex
                     ? { ...prev, sex, captain_id: '', captain_phone: '' }
                     : { ...prev, sex },
                 )
@@ -967,10 +971,19 @@ export default function Lodging() {
                   old_captain_end: stay?.end_date ?? addDays(todayISO(), 30),
                 }))
               }}
-              placeholder={captainOptions.length ? 'Seleccionar…' : `No hay cepevistas ni colportores de ${roomForm.sex}`}
-              hint={`Cepevistas y colportores de la sección ${roomForm.sex}.`}
+              disabled={captainsQuery.isPending || captainsQuery.isError}
+              placeholder={captainsQuery.isPending ? 'Cargando capitanes…' : captainOptions.length ? 'Seleccionar…' : `No hay capitanes disponibles para ${roomForm.sex}`}
+              hint={selectedCaptain?.user_id && !selectedCaptain.sex
+                ? `Este servidor se asignará a la sección ${roomForm.sex}. Confirma que corresponde a esta sección.`
+                : `Cepevistas, colportores y usuarios servidores de Administración. Sección ${roomForm.sex}.`}
               options={captainOptions.map((person) => ({ value: person.id, label: `${person.full_name} · ${label(person.kind)}` }))}
             />
+            {captainsQuery.isError && (
+              <div role="alert" className="sm:col-span-2 rounded-xl bg-danger-bg p-3 text-sm text-danger-fg">
+                <p>No se pudieron cargar los capitanes. {captainsQuery.error?.message}</p>
+                <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={() => captainsQuery.refetch()}>Reintentar</Button>
+              </div>
+            )}
             <Input
               label="WhatsApp"
               type="tel"
