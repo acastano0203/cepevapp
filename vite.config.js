@@ -20,8 +20,8 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        theme_color: '#143a60',
-        background_color: '#ffffff',
+        theme_color: '#007c98',
+        background_color: '#f3f8fb',
         icons: [
           { src: '/icons/pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/pwa-512.png', sizes: '512x512', type: 'image/png' },
@@ -30,7 +30,7 @@ export default defineConfig({
       },
       workbox: {
         // Only the app shell is cached; Supabase data always goes to the network.
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff,woff2}'],
         navigateFallback: '/index.html',
       },
     }),

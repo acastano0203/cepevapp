@@ -17,7 +17,7 @@ export function CardHeader({ title, description, action, className }) {
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-ink sm:text-lg">{title}</h2>
+        <h2 className="text-base font-semibold text-ink sm:text-xl">{title}</h2>
         {description && <p className="mt-1 text-sm text-ink-soft">{description}</p>}
       </div>
       {action && <div className="flex shrink-0 flex-wrap gap-2">{action}</div>}
@@ -32,10 +32,10 @@ export function CardBody({ className, children }) {
 /** Tarjeta de indicador: clicable para filtrar el módulo correspondiente. */
 export function KpiCard({ label, value, detail, tone = 'navy', onClick, icon: Icon }) {
   const tones = {
-    navy: 'border-t-navy-500 text-navy-700',
-    gold: 'border-t-gold-500 text-gold-700',
-    green: 'border-t-emerald-500 text-emerald-700',
-    red: 'border-t-red-400 text-[var(--color-danger-fg)]',
+    navy: 'text-navy-700',
+    gold: 'text-gold-700',
+    green: 'text-emerald-700',
+    red: 'text-[var(--color-danger-fg)]',
   }
 
   const Component = onClick ? 'button' : 'div'
@@ -45,16 +45,16 @@ export function KpiCard({ label, value, detail, tone = 'navy', onClick, icon: Ic
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'surface w-full border-t-[3px] px-4 py-4 text-left transition sm:px-5',
+        'brisa-kpi surface w-full px-4 py-5 text-left transition duration-200 sm:px-5',
         tones[tone],
         onClick && 'hover:-translate-y-0.5 hover:border-navy-300 hover:shadow-md',
       )}
     >
       <span className="flex items-center justify-between gap-2 text-xs font-medium text-ink-soft sm:text-sm">
         <span className="truncate">{label}</span>
-        {Icon && <Icon className="size-4 shrink-0 opacity-60" aria-hidden="true" />}
+        {Icon && <span className="brisa-module-icon"><Icon className="size-6 shrink-0" aria-hidden="true" /></span>}
       </span>
-      <strong className="mt-2 block text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
+      <strong className="mt-2 block font-display text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
         {value}
       </strong>
       {detail && <span className="mt-1 block text-xs text-ink-soft">{detail}</span>}

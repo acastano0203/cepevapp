@@ -31,8 +31,8 @@ export function Button({
   return (
     <Component
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-lg font-semibold whitespace-nowrap',
-        'transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center rounded-xl font-semibold whitespace-nowrap',
+        'transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50',
         '[&_svg]:size-4 [&_svg]:shrink-0',
         VARIANTS[variant],
         SIZES[size],
