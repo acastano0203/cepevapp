@@ -3,13 +3,13 @@ import { Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const CONTROL =
-  'w-full min-w-0 rounded-lg border border-[#cbd6e1] bg-white px-3 text-base text-ink shadow-xs ' +
+  'w-full min-w-0 rounded-xl border border-[#b6ced9] bg-white px-3 text-base text-ink shadow-xs ' +
   'transition-colors placeholder:text-ink-soft/70 focus:border-navy-400 disabled:cursor-not-allowed disabled:bg-navy-50/60'
 
 export function Field({ label, hint, error, children, className, htmlFor }) {
   return (
     <label className={cn('flex min-w-0 flex-col gap-1.5', className)} htmlFor={htmlFor}>
-      {label && <span className="text-sm font-semibold text-[#536c83]">{label}</span>}
+      {label && <span className="text-sm font-semibold text-ink-soft">{label}</span>}
       {children}
       {hint && !error && <span className="text-xs text-ink-soft">{hint}</span>}
       {error && <span className="text-xs text-[var(--color-danger-fg)]">{error}</span>}
@@ -82,7 +82,7 @@ export function SearchInput({ className, ...props }) {
   return (
     <div
       className={cn(
-        'flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#d7e1eb] bg-white px-3 sm:max-w-sm',
+        'flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#b6ced9] bg-white px-3 sm:max-w-sm',
         className,
       )}
     >
