@@ -31,7 +31,7 @@ const as = async (id) => {
   await sql('set role authenticated')
 }
 const save = async ({ id = null, code = 'R-01', sex = 'Mujeres', person = null, user = null, phone = '3001234567', stays = false, bed = null }) =>
-  (await sql(`select * from room_upsert($1,$2,$3,2,$4,$5,'01',$6,$7,cepev_today()+30,$8)`,
+  (await sql(`select * from room_upsert($1,$2,$3,4,$4,$5,'01',$6,$7,cepev_today()+30,$8)`,
     [id, code, sex, person, phone, stays, bed, user])).rows[0]
 
 try {
@@ -46,7 +46,7 @@ try {
     grant execute on function auth.uid() to authenticated;
   `)
   for (const file of ['01_schema', '02_views', '03_rls', '04_functions', '09_colporteurs',
-    '10_people_documents', '11_cepevistas', '17_lodging_rooms', '25_payments',
+    '10_people_documents', '11_cepevistas', '12_kitchen_dynamic', '17_lodging_rooms', '25_payments',
     '26_roles_maintenance', '27_admin_access', '29_room_server_captains']) await migrate(file)
   await migrate('29_room_server_captains')
   checks++
@@ -66,7 +66,29 @@ try {
   check(await scalar('select count(*)::int from people'), 2) // Listing is read-only.
 
   const room = await save({ user: ids.server })
-  check(await scalar('select count(*)::int from beds where room_id=$1', [room.id]), 4)
+  check(await scalar('select count(*)::int from beds where room_id=$1', [room.id]), 8)
+  // Regression: a single captain in an eight-bed room used to show zero.
+  const beforeDashboard = (await sql('select * from v_dashboard')).rows[0]
+  check(Number(beforeDashboard.beds_occupied), 0)
+  await sql('reset role')
+  await migrate('30_dashboard_captain_occupancy')
+  await migrate('30_dashboard_captain_occupancy')
+  await as(ids.admin)
+  const afterDashboard = (await sql('select * from v_dashboard')).rows[0]
+  check(Number(afterDashboard.beds_occupied), 1)
+  check(Number(afterDashboard.beds_free), 7)
+  check(Number(afterDashboard.beds_total), 8)
+  check({ ...afterDashboard, beds_occupied: 0 }, { ...beforeDashboard, beds_occupied: 0 })
+  // Ordinary stays add to the captain; blocked beds are never occupied.
+  const spareBed = await scalar("select id from beds where room_id=$1 and label='02'", [room.id])
+  const stayId = await scalar("insert into stays(person_id,bed_id,start_date,end_date,status) values ($1,$2,cepev_today(),cepev_today()+10,'Alojado') returning id", [person, spareBed])
+  check(Number(await scalar('select beds_occupied from v_dashboard')), 2)
+  await sql("update stays set status='Finalizado' where id=$1", [stayId])
+  await sql('update beds set is_blocked=true where id=$1', [spareBed])
+  check(Number(await scalar('select beds_occupied from v_dashboard')), 1)
+  check(Number(await scalar('select beds_blocked from v_dashboard')), 1)
+  check(Number(await scalar('select beds_free from v_dashboard')), 6)
+  await sql('update beds set is_blocked=false where id=$1', [spareBed])
   check(await scalar('select captain_user_id from people where id=$1', [room.captain_id]), ids.server)
   check(await scalar('select birth_date from people where id=$1', [room.captain_id]), null)
   check(await scalar("select count(*)::int from v_beds_status where room_id=$1 and availability='Capitan'", [room.id]), 1)
