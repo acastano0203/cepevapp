@@ -1,41 +1,68 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Nimbus";
+  src: url("/fonts/nimbus-400.woff") format("woff");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Nimbus";
+  src: url("/fonts/nimbus-700.woff") format("woff");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Patio";
+  src: url("/fonts/patio-400.woff") format("woff");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Patio";
+  src: url("/fonts/patio-700.woff") format("woff");
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* ==========================================================================
    Tokens de marca CEPEV
    ========================================================================== */
 @theme {
-  --color-navy-50:  #eef4fa;
-  --color-navy-100: #d9e5f1;
-  --color-navy-200: #b4c9e0;
-  --color-navy-300: #86a8c9;
-  --color-navy-400: #5284aa;
-  --color-navy-500: #2f6493;
-  --color-navy-600: #174776;
-  --color-navy-700: #143a60;
-  --color-navy-800: #12304e;
-  --color-navy-900: #0d2338;
+  --color-navy-50:  #e9f3f7;
+  --color-navy-100: #dff2f7;
+  --color-navy-200: #c4e5eb;
+  --color-navy-300: #85bbc9;
+  --color-navy-400: #45697e;
+  --color-navy-500: #007c98;
+  --color-navy-600: #007c98;
+  --color-navy-700: #006e87;
+  --color-navy-800: #18536b;
+  --color-navy-900: #183b56;
 
-  --color-gold-50:  #fff8e8;
-  --color-gold-100: #fff1d5;
-  --color-gold-200: #ffe2a8;
-  --color-gold-300: #f2c869;
-  --color-gold-400: #e9b946;
-  --color-gold-500: #e6a31b;
-  --color-gold-600: #c5860e;
-  --color-gold-700: #8e6110;
+  --color-gold-50:  #fff6f0;
+  --color-gold-100: #ffebdd;
+  --color-gold-200: #ffdcc8;
+  --color-gold-300: #f5c2a3;
+  --color-gold-400: #efae86;
+  --color-gold-500: #df996c;
+  --color-gold-600: #b64726;
+  --color-gold-700: #8b381d;
 
-  --color-ink:      #18334e;
-  --color-ink-soft: #5c6c7d;
-  --color-line:     #dce4ed;
-  --color-canvas:   #f4f6fa;
+  --color-ink:      #183b56;
+  --color-ink-soft: #546c7e;
+  --color-line:     #dce8ee;
+  --color-canvas:   #f3f8fb;
 
-  --color-success-bg: #e7f3ec;
-  --color-success-fg: #286348;
+  --color-success-bg: #e2f1e8;
+  --color-success-fg: #286447;
   --color-danger-bg:  #fae9e6;
   --color-danger-fg:  #9b3e30;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --radius-card: 0.75rem;
+  --font-sans: "Nimbus", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Patio", "Nimbus", sans-serif;
+  --text-base: 1.0625rem;
+  --radius-card: 1.375rem;
 }
 
 /* ==========================================================================
@@ -55,6 +82,8 @@
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     margin: 0;
     min-height: 100dvh;
@@ -68,8 +97,19 @@
     touch-action: manipulation;
   }
 
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.2;
+  }
+
+  .lucide {
+    stroke-width: 1.8;
+  }
+
   :is(button, a, input, select, textarea, [tabindex]):focus-visible {
-    outline: 3px solid var(--color-gold-500);
+    outline: 3px solid var(--color-navy-500);
     outline-offset: 2px;
   }
 
@@ -95,10 +135,64 @@
   }
 }
 
+/* Service colors identify modules; status colors keep their own meaning. */
+@layer components {
+  .brisa-nav, .brisa-module-icon {
+    --module-accent: #00778b;
+    --module-tint: #dff5f7;
+  }
+  .brisa-nav[href="/cocina"], .brisa-module-icon:has(.lucide-utensils-crossed) {
+    --module-accent: #b64726;
+    --module-tint: #ffeadf;
+  }
+  .brisa-nav[href="/vehiculos"], .brisa-module-icon:has(.lucide-bus) {
+    --module-accent: #2754b8;
+    --module-tint: #e7eeff;
+  }
+  .brisa-nav[href="/colportores"], .brisa-module-icon:has(.lucide-book-open) {
+    --module-accent: #7241a4;
+    --module-tint: #f2e9ff;
+  }
+  .brisa-nav[href="/cepevistas"] {
+    --module-accent: #7241a4;
+    --module-tint: #f2e9ff;
+  }
+  .brisa-nav[href="/pagos"] {
+    --module-accent: #286447;
+    --module-tint: #e2f1e8;
+  }
+  .brisa-nav[href="/mantenimiento"] {
+    --module-accent: #8b381d;
+    --module-tint: #ffebdd;
+  }
+  .brisa-nav > svg {
+    color: var(--module-accent);
+  }
+  .brisa-nav-active {
+    background: var(--module-tint);
+    color: var(--module-accent);
+  }
+  .brisa-module-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    color: var(--module-accent);
+    background: var(--module-tint);
+  }
+  .brisa-kpi > strong {
+    color: var(--color-ink);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }

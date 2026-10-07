@@ -155,6 +155,8 @@ export const useKitchenActions = (date) => {
  * Alojamientos
  * ======================================================================== */
 export const useBeds = () => useQuery({ queryKey: qk.beds, queryFn: lodgingApi.beds })
+export const useRoomCaptains = (enabled = true) =>
+  useQuery({ queryKey: ['lodging', 'captains'], queryFn: lodgingApi.roomCaptains, enabled })
 export const useStays = () => useQuery({ queryKey: qk.stays, queryFn: () => lodgingApi.stays() })
 export const useArrivals = () => useQuery({ queryKey: qk.arrivals, queryFn: lodgingApi.arrivalsWithoutBed })
 export const useRoomIssues = () => useQuery({ queryKey: qk.roomIssues, queryFn: lodgingApi.roomIssues })
@@ -179,7 +181,7 @@ export const useLodgingActions = () => ({
   }),
   saveRoom: useAppMutation(lodgingApi.saveRoom, {
     success: (_data, variables) => (variables.id ? 'Dormitorio actualizado' : 'Dormitorio creado'),
-    invalidate: LODGING_KEYS,
+    invalidate: [...LODGING_KEYS, ['lodging', 'captains'], ['people']],
   }),
   createRoomIssue: useAppMutation(lodgingApi.createRoomIssue, {
     success: 'Novedad registrada',
@@ -325,9 +327,9 @@ export const useAdminActions = () => ({
     success: 'Accesos guardados. Se aplican cuando cada usuario vuelva a ingresar o recargue la página.',
     invalidate: [['admin']],
   }),
-  createUser: useAppMutation(adminApi.createUser, { success: 'Usuario creado', invalidate: [['admin']] }),
-  updateUser: useAppMutation(adminApi.updateUser, { success: 'Usuario actualizado', invalidate: [['admin']] }),
-  deleteUser: useAppMutation(adminApi.deleteUser, { success: 'Usuario eliminado', invalidate: [['admin']] }),
+  createUser: useAppMutation(adminApi.createUser, { success: 'Usuario creado', invalidate: [['admin'], ['lodging', 'captains']] }),
+  updateUser: useAppMutation(adminApi.updateUser, { success: 'Usuario actualizado', invalidate: [['admin'], ['lodging', 'captains'], qk.beds, ['people']] }),
+  deleteUser: useAppMutation(adminApi.deleteUser, { success: 'Usuario eliminado', invalidate: [['admin'], ['lodging', 'captains']] }),
 })
 
 /* ===========================================================================

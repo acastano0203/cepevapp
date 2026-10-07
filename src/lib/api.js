@@ -239,6 +239,8 @@ export const lodgingApi = {
   checkIn: (stayId) => runQuery(supabase.rpc('stay_check_in', { p_stay: stayId })),
   checkOut: (stayId) => runQuery(supabase.rpc('stay_check_out', { p_stay: stayId })),
 
+  roomCaptains: () => runQuery(supabase.rpc('room_captain_candidates')),
+
   /** Crea o edita un dormitorio; el servidor ajusta sus camas al número pedido. */
   saveRoom: (payload) =>
     runQuery(
@@ -247,7 +249,8 @@ export const lodgingApi = {
         p_code: payload.code,
         p_sex: payload.sex,
         p_bunks: Number(payload.bunks),
-        p_captain: payload.captain_id || null,
+        p_captain: payload.captain_user_id ? null : payload.captain_id || null,
+        p_captain_user: payload.captain_user_id || null,
         p_captain_phone: payload.captain_phone,
         p_captain_bed: payload.captain_bed || '01',
         // Solo cuenta al cambiar de capitán: si el anterior se queda y en qué cama

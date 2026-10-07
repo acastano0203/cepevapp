@@ -212,24 +212,24 @@ export default function Dashboard() {
       </PageHeader>
 
       {/* Banda de resumen */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-5 rounded-xl border-l-4 border-gold-500 bg-navy-700 px-5 py-6 text-white sm:px-8">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-5 rounded-[28px] border border-[#c4e5eb] bg-[#dff3f6] px-5 py-7 text-ink sm:px-8">
         <div className="min-w-0">
-          <span className="text-[11px] font-bold tracking-[0.13em] text-gold-300">
+          <span className="text-[11px] font-bold tracking-[0.13em] text-navy-700">
             OPERACIÓN DEL DÍA
           </span>
           <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
             Preparados para servir.
           </h2>
-          <p className="mt-2 text-sm text-navy-100">
+          <p className="mt-2 text-sm text-ink-soft">
             {formatNumber(data?.beds_free ?? 0)} camas disponibles ·{' '}
             {data?.trips_active ?? 0} recorridos activos
           </p>
         </div>
-        <div className="flex items-center gap-4 border-navy-500 pl-0 sm:border-l sm:pl-8">
-          <strong className="text-4xl font-medium tracking-tighter sm:text-5xl">
+        <div className="flex items-center gap-4 border-[#9dced7] pl-0 sm:border-l sm:pl-8">
+          <strong className="font-display text-4xl font-bold tracking-tighter sm:text-5xl">
             {formatNumber(data?.beds_occupied ?? 0)}
           </strong>
-          <span className="text-[13px] text-navy-100">
+          <span className="text-[13px] text-ink-soft">
             personas alojadas
             <br />
             de {formatNumber(data?.beds_total ?? 0)} camas
